@@ -3,6 +3,10 @@ let state = { type: 'all', keyword: '', onlyFavorites: false, list: [], active: 
 let pending = []
 let scheduleId = null
 let lastMove = null
+let undoStack = []
+let redoStack = []
+let undoEnabled = false
+let undoClosedShown = false
 
 const $ = (sel) => document.querySelector(sel)
 const $$ = (sel) => Array.from(document.querySelectorAll(sel))
@@ -83,6 +87,7 @@ async function refresh() {
 
 async function init() {
   const settings = await window.clipfast.getSettings()
+  undoClosedShown = localStorage.getItem('undoClosedShown') === '1'
   $('#search').oninput = async (e) => { state.keyword = e.target.value; await refresh() }
   $('#type').onchange = async (e) => { state.type = e.target.value; await refresh() }
   $('#onlyFav').onchange = async (e) => { state.onlyFavorites = e.target.checked; await refresh() }
@@ -106,6 +111,16 @@ async function init() {
       } catch { showMsg('更新失败') }
     }, 250)
   })
+  // 复制操作发生后关闭撤销面板并重置堆栈
+  window.clipfastEvents.onNewRecord(() => {
+    // 仅在撤销功能从开启变为关闭的瞬间提示一次
+    if (undoEnabled && !undoClosedShown) {
+      showMsg('撤销已关闭', true)
+      undoClosedShown = true
+      localStorage.setItem('undoClosedShown', '1')
+    }
+    resetUndo()
+  })
   window.clipfastEvents.onMovedRecord(({ id, fromIndex }) => {
     // 若当前筛选能看到该记录，则将其移动到顶部，并提示可撤销
     const idx = state.list.findIndex(x => x.id === id)
@@ -114,17 +129,31 @@ async function init() {
       state.list.splice(idx, 1)
       state.list.unshift(item)
       moveDomItemToTop(idx)
-      lastMove = { id, fromIndex }
+      lastMove = { id, fromIndex, toIndex: 0 }
+      undoStack.unshift(lastMove)
+      redoStack.length = 0
+      undoEnabled = true
+      undoClosedShown = false
+      localStorage.removeItem('undoClosedShown')
       showUndoBanner()
     } else {
       // 不在当前筛选结果中，仅提示
-      lastMove = { id, fromIndex }
+      lastMove = { id, fromIndex, toIndex: 0 }
+      undoStack.unshift(lastMove)
+      redoStack.length = 0
+      undoEnabled = true
+      undoClosedShown = false
+      localStorage.removeItem('undoClosedShown')
       showUndoBanner()
     }
   })
   window.clipfastEvents.onUndoed(({ id, toIndex }) => {
+    // 撤销完成后推入重做栈，并清空当前 lastMove
+    const u = undoStack.shift()
+    if (u) redoStack.unshift({ id: u.id, fromIndex: u.toIndex, toIndex: u.fromIndex })
     refresh().then(() => showMsg('已撤销移动'))
     lastMove = null
+    undoEnabled = false
     removeUndoLink()
   })
   window.clipfastEvents.onPruned(({ ids }) => {
@@ -182,9 +211,11 @@ function matches(r) {
 function showMsg(s, persistent = false) {
   const el = $('#msg'); if (!el) return
   el.textContent = s
+  if (!s) { el.classList.remove('show'); return }
+  el.classList.add('show')
   clearTimeout(el.__t)
   if (persistent || lastMove) return
-  el.__t = setTimeout(() => { if (!lastMove) el.textContent = '' }, 1800)
+  el.__t = setTimeout(() => { if (!lastMove) { el.textContent = ''; el.classList.remove('show') } }, 1800)
 }
 
 function showUndoBanner() {
@@ -198,13 +229,22 @@ function addUndoLink() {
   link.href = 'javascript:void(0)'
   link.style.marginLeft = '6px'
   link.textContent = '撤销'
-  link.onclick = async () => { if (!lastMove) return; const ok = await window.clipfast.undoMove(lastMove.id, lastMove.fromIndex); if (!ok) showMsg('撤销失败') }
+  link.onclick = async () => {
+    const top = undoStack[0]
+    if (!top) return
+    const ok = await window.clipfast.undoMove(top.id, top.fromIndex)
+    if (!ok) showMsg('撤销失败')
+    else closeUndoPanel()
+  }
   removeUndoLink()
   el.appendChild(link)
   el.__undo = link
 }
 
-function removeUndoLink() { const el = $('#msg'); if (el && el.__undo) { try { el.removeChild(el.__undo) } catch {} el.__undo = null } }
+function removeUndoLink() { const el = $('#msg'); if (el && el.__undo) { try { el.removeChild(el.__undo) } catch {} el.__undo = null; if (!el.textContent) el.classList.remove('show') } }
+
+function closeUndoPanel() { removeUndoLink(); showMsg('', false) }
+function resetUndo() { lastMove = null; undoStack.length = 0; redoStack.length = 0; undoEnabled = false; removeUndoLink() }
 
 function moveDomItemToTop(currentIndex) {
   const container = $('#list')

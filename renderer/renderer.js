@@ -7,6 +7,7 @@ let undoStack = []
 let redoStack = []
 let undoEnabled = false
 let undoClosedShown = false
+let shortcutDraft = null
 
 const $ = (sel) => document.querySelector(sel)
 const $$ = (sel) => Array.from(document.querySelectorAll(sel))
@@ -88,6 +89,7 @@ async function refresh() {
 async function init() {
   const settings = await window.clipfast.getSettings()
   undoClosedShown = localStorage.getItem('undoClosedShown') === '1'
+  $('#openShortcut').onclick = openShortcutModal
   $('#search').oninput = async (e) => { state.keyword = e.target.value; await refresh() }
   $('#type').onchange = async (e) => { state.type = e.target.value; await refresh() }
   $('#onlyFav').onchange = async (e) => { state.onlyFavorites = e.target.checked; await refresh() }
@@ -245,6 +247,78 @@ function removeUndoLink() { const el = $('#msg'); if (el && el.__undo) { try { e
 
 function closeUndoPanel() { removeUndoLink(); showMsg('', false) }
 function resetUndo() { lastMove = null; undoStack.length = 0; redoStack.length = 0; undoEnabled = false; removeUndoLink() }
+
+function openShortcutModal() {
+  const m = $('#shortcutModal')
+  shortcutDraft = null
+  renderKeys('—', 'shortcutPreviewKeys')
+  window.clipfast.getSettings().then(s => { const cur = s?.shortcut || '—'; const el = document.getElementById('shortcutCurrentKeys'); if (el) el.textContent = cur })
+  m.classList.add('show')
+  m.tabIndex = -1
+  m.focus()
+  const onKey = (e) => {
+    e.preventDefault()
+    const parts = []
+    if (e.ctrlKey || e.metaKey) parts.push('CommandOrControl')
+    if (e.altKey) parts.push('Alt')
+    if (e.shiftKey) parts.push('Shift')
+    let key = e.key
+    // 统一常见按键名称到 Electron Accelerator
+    const map = { Escape: 'Escape', Enter: 'Enter', ' ': 'Space', Space: 'Space', Backspace: 'Backspace', Tab: 'Tab' }
+    if (map[key]) key = map[key]
+    else if (/^[a-z]$/.test(key)) key = key.toUpperCase()
+    else if (/^[A-Z]$/.test(key)) {
+      // 已是大写字母
+    } else if (/^F\d{1,2}$/i.test(key)) key = key.toUpperCase()
+    else if (/^Arrow(Up|Down|Left|Right)$/.test(key)) key = key.replace('Arrow', '')
+    else if (/^\d$/.test(key)) {
+      // 数字键
+    } else if (['Shift','Alt','Control','Meta'].includes(key)) {
+      // 仅修饰键：实时预览组合，但不生成可保存的快捷键
+      const preview = parts.join('+') || '—'
+      document.getElementById('saveShortcut').disabled = true
+      renderKeys(preview, 'shortcutPreviewKeys')
+      return
+    } else {
+      return
+    }
+    parts.push(key)
+    // 至少包含一个非修饰键
+    if (parts.length <= ((e.ctrlKey||e.metaKey?1:0)+(e.altKey?1:0)+(e.shiftKey?1:0))) return
+    shortcutDraft = parts.join('+')
+    renderKeys(shortcutDraft, 'shortcutPreviewKeys')
+    document.getElementById('saveShortcut').disabled = false
+  }
+  window.addEventListener('keydown', onKey, { once: false })
+  $('#saveShortcut').onclick = async () => {
+    if (!shortcutDraft) { showMsg('请按下快捷键后再保存'); return }
+    const ok = await window.clipfast.setShortcut(shortcutDraft)
+    if (ok) {
+      showMsg('快捷键已更新')
+      m.classList.remove('show')
+    } else {
+      showMsg('快捷键设置失败')
+    }
+    window.removeEventListener('keydown', onKey)
+  }
+  $('#cancelShortcut').onclick = () => { m.classList.remove('show'); window.removeEventListener('keydown', onKey) }
+}
+
+function renderKeys(acc, elId) {
+  const el = document.getElementById(elId)
+  if (!el) return
+  el.innerHTML = ''
+  const parts = String(acc || '—').split('+').filter(Boolean)
+  if (!parts.length) parts.push('—')
+  const isMac = navigator.platform.toLowerCase().includes('mac')
+  const map = { CommandOrControl: isMac ? '⌘' : 'Ctrl', Alt: isMac ? '⌥' : 'Alt', Shift: isMac ? '⇧' : 'Shift', Escape: 'Esc' }
+  parts.forEach(p => {
+    const chip = document.createElement('span')
+    chip.className = 'key-chip'
+    chip.textContent = map[p] || p
+    el.appendChild(chip)
+  })
+}
 
 function moveDomItemToTop(currentIndex) {
   const container = $('#list')

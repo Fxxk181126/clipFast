@@ -18,6 +18,7 @@
         </select>
         <label class="fav"><input id="onlyFav" type="checkbox" /> 仅收藏</label>
         <button id="refresh" class="btn">刷新</button>
+        <button id="openShortcut" class="btn">设置快捷键</button>
         <span id="msg" class="msg"></span>
       </header>
       <aside class="sidebar">
@@ -31,6 +32,20 @@
       <section class="preview" id="preview">
         <div class="placeholder">选择一条记录查看预览</div>
       </section>
+    </div>
+    <div id="shortcutModal" class="modal">
+      <div class="modal-body">
+        <div class="modal-title">按下你想要的快捷键组合</div>
+        <div class="field">
+          <div class="label">快捷键</div>
+          <div class="keys" id="shortcutPreviewKeys"></div>
+        </div>
+        <div class="desc"><span class="keys-inline" id="shortcutCurrentKeys"></span></div>
+        <div class="modal-actions">
+          <button id="saveShortcut" class="btn primary" disabled>保存</button>
+          <button id="cancelShortcut" class="btn">取消</button>
+        </div>
+      </div>
     </div>
     <script src="./renderer.js"></script>
   </body>

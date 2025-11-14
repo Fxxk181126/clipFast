@@ -5,6 +5,7 @@ html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystem
 .header input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; }
 .header select { padding: 8px; min-width: 96px; height: 32px; }
 .header .btn { padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; background: #f7f7f7; cursor: pointer; }
+.shortcut-label { color: #666; font-size: 12px; align-self: center; }
 .msg { margin-left: 6px; color: #666; font-size: 12px; align-self: center; display: none; }
 .msg { background: #fff8e1; border: 1px solid #f0d48a; padding: 4px 8px; border-radius: 6px; }
 .msg.show { display: inline-flex; align-items: center; }
@@ -21,3 +22,18 @@ html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystem
 .item .btn { padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; background: #f7f7f7; }
 .preview { border-left: 1px solid #eee; padding: 12px; }
 .placeholder { color: #999; }
+
+/* 快捷键设置弹窗 */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.15); display: none; align-items: center; justify-content: center; }
+.modal.show { display: flex; backdrop-filter: blur(4px); }
+.modal-body { width: 420px; background: #fff; border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,0.18); padding: 18px; transform: translateY(-4px); }
+.modal-title { font-weight: 700; font-size: 16px; margin-bottom: 12px; }
+.field { display: grid; grid-template-columns: 68px 1fr; align-items: center; gap: 8px; margin-bottom: 12px; }
+.label { color: #666; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; background: #fafafa; border: 1px solid #eee; border-radius: 10px; min-height: 42px; }
+.key-chip { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 8px; border: 1px solid #e2e2e2; background: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; color: #333; }
+.desc { color: #888; margin: 4px 0 12px 68px; }
+.keys-inline { display: inline-flex; gap: 6px; vertical-align: middle; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+.btn.primary { background: #1677ff; color: #fff; border-color: #1677ff; }
+.btn.primary:disabled { opacity: 0.4; cursor: not-allowed; }

@@ -177,9 +177,13 @@ ipcMain.handle('settings:setShortcut', async (_evt, key) => {
   const settings = store.get('settings')
   settings.shortcut = key
   store.set('settings', settings)
-  globalShortcut.unregisterAll()
-  globalShortcut.register(key, () => togglePanel())
-  return true
+  try {
+    globalShortcut.unregisterAll()
+    const ok = globalShortcut.register(key, () => togglePanel())
+    return !!ok
+  } catch (e) {
+    return false
+  }
 })
 
 // 撤销移动：将顶部项移回指定索引位置

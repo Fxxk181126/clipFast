@@ -1,6 +1,6 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, Tray, Menu } = require('electron')
 const path = require('path')
-const { startClipboardWatcher, stopClipboardWatcher } = require('./src/clipboard')
+const { startClipboardWatcher, stopClipboardWatcher, notePastedImageHash, notePastedText } = require('./src/clipboard')
 const { spawn } = require('child_process')
 const fs = require('fs')
 
@@ -204,11 +204,22 @@ ipcMain.handle('records:undoMove', async (_evt, id, toIndex) => {
 })
 
 // 一键粘贴：设置剪贴板并向前台应用发送粘贴快捷键
-ipcMain.handle('records:paste', async (_evt, text) => {
+ipcMain.handle('records:paste', async (_evt, text, id) => {
   try {
     if (!text) return false
+    if (id) {
+      const records = store.get('records')
+      const idx = records.findIndex(r => r.id === id)
+      if (idx > 0) {
+        const target = records[idx]
+        const next = [target, ...records.slice(0, idx), ...records.slice(idx + 1)]
+        store.set('records', next)
+        BrowserWindow.getAllWindows().forEach(w => { try { w.webContents.send('records:moved', { id: target.id, fromIndex: idx }) } catch (e) {} })
+      }
+    }
     // 写入剪贴板
     clipboard.writeText(text)
+    notePastedText(text)
     // 隐藏面板，回到之前的前台应用窗口
     if (mainWindow && mainWindow.isVisible()) mainWindow.hide()
 
@@ -225,6 +236,40 @@ ipcMain.handle('records:paste', async (_evt, text) => {
       })
     }
     // 其他平台：保留剪贴板，用户手动粘贴（可后续扩展）
+    return true
+  } catch (e) {
+    return false
+  }
+})
+
+ipcMain.handle('records:pasteImage', async (_evt, dataUrl, id) => {
+  try {
+    if (!dataUrl) return false
+    const img = nativeImage.createFromDataURL(dataUrl)
+    const ihash = require('crypto').createHash('sha1').update(img.toPNG()).digest('hex')
+    if (id) {
+      const records = store.get('records')
+      const idx = records.findIndex(r => r.id === id)
+      if (idx > 0) {
+        const target = records[idx]
+        const next = [target, ...records.slice(0, idx), ...records.slice(idx + 1)]
+        store.set('records', next)
+        BrowserWindow.getAllWindows().forEach(w => { try { w.webContents.send('records:moved', { id: target.id, fromIndex: idx }) } catch (e) {} })
+      }
+    }
+    clipboard.writeImage(img)
+    notePastedImageHash(ihash)
+    if (mainWindow && mainWindow.isVisible()) mainWindow.hide()
+    if (process.platform === 'darwin') {
+      await new Promise((resolve, reject) => {
+        setTimeout(() => {
+          const script = 'tell application "System Events" to keystroke "v" using {command down}'
+          const p = spawn('osascript', ['-e', script])
+          p.on('error', reject)
+          p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('osascript exit ' + code))))
+        }, 120)
+      })
+    }
     return true
   } catch (e) {
     return false

@@ -1,8 +1,9 @@
-const { clipboard } = require('electron')
+const { clipboard, nativeImage } = require('electron')
 const crypto = require('crypto')
 
 let timer = null
 let lastText = ''
+let lastImageHash = ''
 let hashIndex = new Map()
 
 function classifyText(text) {
@@ -19,8 +20,13 @@ function idOf(text) {
 function buildIndex(records) {
   hashIndex.clear()
   for (const r of records) {
-    const h = r.hash || idOf(r.text)
-    hashIndex.set(h, r.id)
+    if (r.type === 'image') {
+      if (r.hash) hashIndex.set(r.hash, r.id)
+      if (r.thumbHash) hashIndex.set(r.thumbHash, r.id)
+    } else {
+      const h = r.hash || idOf(r.text)
+      hashIndex.set(h, r.id)
+    }
   }
 }
 
@@ -29,43 +35,77 @@ function startClipboardWatcher(store, onEvent) {
   buildIndex(store.get('records') || [])
 
   timer = setInterval(() => {
-    const text = clipboard.readText()
-    if (!text) return
-    if (text === lastText) return
-    lastText = text
-
-    const records = store.get('records')
-    const hash = idOf(text)
-    const existedId = hashIndex.get(hash)
-
-    if (existedId) {
-      // 已存在：将旧记录移动到顶部，保持原元数据不变
-      const idx = records.findIndex(r => r.id === existedId)
-      if (idx > 0) {
-        const target = records[idx]
-        const next = [target, ...records.slice(0, idx), ...records.slice(idx + 1)]
-        store.set('records', next)
-        // 触发事件，便于前端增量更新与提示/撤销
-        if (typeof onEvent === 'function') onEvent({ kind: 'moved', id: target.id, fromIndex: idx, record: target })
-      } else if (idx === 0) {
-        // 已在顶部，无需动作
+    const img = clipboard.readImage()
+    if (!img.isEmpty()) {
+      const png = img.toPNG()
+      const ihash = crypto.createHash('sha1').update(png).digest('hex')
+      if (ihash !== lastImageHash) {
+        lastImageHash = ihash
+        const records = store.get('records')
+        const existedId = hashIndex.get(ihash)
+        if (existedId) {
+          const idx = records.findIndex(r => r.id === existedId)
+          if (idx > 0) {
+            const target = records[idx]
+            const next = [target, ...records.slice(0, idx), ...records.slice(idx + 1)]
+            store.set('records', next)
+            if (typeof onEvent === 'function') onEvent({ kind: 'moved', id: target.id, fromIndex: idx, record: target })
+          }
+        } else {
+          const thumb = img.resize({ width: 256 })
+          const thash = crypto.createHash('sha1').update(thumb.toPNG()).digest('hex')
+          const rec = {
+            id: ihash + '-' + Date.now(),
+            hash: ihash,       // 原图hash
+            thumbHash: thash,  // 缩略图hash（用于粘贴后移动）
+            type: 'image',
+            imageData: thumb.toDataURL(),
+            ts: Date.now(),
+            tags: []
+          }
+          const max = store.get('settings.maxRecords') || 100000
+          const next = [rec, ...records]
+          if (next.length > max) next.length = max
+          store.set('records', next)
+          hashIndex.set(ihash, rec.id)
+          hashIndex.set(thash, rec.id)
+          if (typeof onEvent === 'function') onEvent({ kind: 'created', record: rec })
+        }
       }
     } else {
-      // 新记录：创建并添加到顶部
-      const rec = {
-        id: hash + '-' + Date.now(),
-        hash,
-        type: classifyText(text),
-        text,
-        ts: Date.now(),
-        tags: []
+      const text = clipboard.readText()
+      if (!text) return
+      if (text === lastText) return
+      lastText = text
+
+      const records = store.get('records')
+      const hash = idOf(text)
+      const existedId = hashIndex.get(hash)
+
+      if (existedId) {
+        const idx = records.findIndex(r => r.id === existedId)
+        if (idx > 0) {
+          const target = records[idx]
+          const next = [target, ...records.slice(0, idx), ...records.slice(idx + 1)]
+          store.set('records', next)
+          if (typeof onEvent === 'function') onEvent({ kind: 'moved', id: target.id, fromIndex: idx, record: target })
+        }
+      } else {
+        const rec = {
+          id: hash + '-' + Date.now(),
+          hash,
+          type: classifyText(text),
+          text,
+          ts: Date.now(),
+          tags: []
+        }
+        const max = store.get('settings.maxRecords') || 100000
+        const next = [rec, ...records]
+        if (next.length > max) next.length = max
+        store.set('records', next)
+        hashIndex.set(hash, rec.id)
+        if (typeof onEvent === 'function') onEvent({ kind: 'created', record: rec })
       }
-      const max = store.get('settings.maxRecords') || 100000
-      const next = [rec, ...records]
-      if (next.length > max) next.length = max
-      store.set('records', next)
-      hashIndex.set(hash, rec.id)
-      if (typeof onEvent === 'function') onEvent({ kind: 'created', record: rec })
     }
 
     const prune = pruneByAge(store, 3)
@@ -100,4 +140,12 @@ function stopClipboardWatcher() {
   timer = null
 }
 
-module.exports = { startClipboardWatcher, stopClipboardWatcher, pruneByAge }
+function notePastedImageHash(hash) {
+  lastImageHash = hash || ''
+}
+
+function notePastedText(text) {
+  lastText = text || ''
+}
+
+module.exports = { startClipboardWatcher, stopClipboardWatcher, pruneByAge, notePastedImageHash, notePastedText }

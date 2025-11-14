@@ -27,14 +27,17 @@ function renderList() {
         <span>${item.type.toUpperCase()}</span>
         <span>${new Date(item.ts).toLocaleString()}</span>
       </div>
-      <div class="text">${escapeHtml(previewText(item.text))}</div>
+      ${item.type === 'image' ? `<img class="img" src="${item.imageData}" />` : `<div class="text">${escapeHtml(previewText(item.text))}</div>`}
       <div class="actions">
         <button class="btn paste">一键粘贴</button>
         <button class="btn fav">${isFav(item.id) ? '取消收藏' : '收藏'}</button>
         <button class="btn del">删除</button>
       </div>
     `
-    div.querySelector('.paste').onclick = () => window.clipfast.pasteToActive(item.text)
+    div.querySelector('.paste').onclick = () => {
+      if (item.type === 'image') window.clipfastImage.pasteToActive(item.imageData, item.id)
+      else window.clipfast.pasteToActive(item.text, item.id)
+    }
     div.querySelector('.fav').onclick = async () => {
       const next = !isFav(item.id)
       await window.clipfast.favoriteRecord(item.id, next)
@@ -60,9 +63,16 @@ function renderPreview() {
     return
   }
   const item = state.active
-  const pre = document.createElement('pre')
-  pre.textContent = item.text
-  box.appendChild(pre)
+  if (item.type === 'image') {
+    const img = document.createElement('img')
+    img.src = item.imageData
+    img.style.maxWidth = '100%'
+    box.appendChild(img)
+  } else {
+    const pre = document.createElement('pre')
+    pre.textContent = item.text
+    box.appendChild(pre)
+  }
 }
 
 function isFav(id) {
@@ -183,14 +193,17 @@ function applyIncremental(items) {
         <span>${rec.type.toUpperCase()}</span>
         <span>${new Date(rec.ts).toLocaleString()}</span>
       </div>
-      <div class="text">${escapeHtml(previewText(rec.text))}</div>
+      ${rec.type === 'image' ? `<img class="img" src="${rec.imageData}" />` : `<div class="text">${escapeHtml(previewText(rec.text))}</div>`}
       <div class="actions">
         <button class="btn paste">一键粘贴</button>
         <button class="btn fav">收藏</button>
         <button class="btn del">删除</button>
       </div>
     `
-    div.querySelector('.paste').onclick = () => window.clipfast.pasteToActive(rec.text)
+    div.querySelector('.paste').onclick = () => {
+      if (rec.type === 'image') window.clipfastImage.pasteToActive(rec.imageData, rec.id)
+      else window.clipfast.pasteToActive(rec.text, rec.id)
+    }
     div.querySelector('.fav').onclick = async () => { await window.clipfast.favoriteRecord(rec.id, true); await refresh() }
     div.querySelector('.del').onclick = async () => { await window.clipfast.deleteRecord(rec.id); await refresh() }
     div.onclick = () => { state.active = rec; renderPreview() }
@@ -322,10 +335,14 @@ function renderKeys(acc, elId) {
 
 function moveDomItemToTop(currentIndex) {
   const container = $('#list')
+  const prevScroll = container.scrollTop
   const node = container.children[currentIndex]
   if (!node) return
   container.removeChild(node)
   container.insertBefore(node, container.firstChild)
+  node.classList.add('flash')
+  setTimeout(() => node.classList.remove('flash'), 600)
+  container.scrollTop = prevScroll
 }
 
 function moveDomItem(from, to) {

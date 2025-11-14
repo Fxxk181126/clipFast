@@ -16,8 +16,11 @@ html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystem
 .cat.active { background: #e6f2ff; border-color: #b3d1ff; }
 .list { overflow: auto; padding: 8px; }
 .item { border: 1px solid #e5e5e5; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff; }
+.item { transition: background-color 200ms ease; }
+.item.flash { background: #fff8e6; }
 .item .meta { display: flex; justify-content: space-between; color: #888; font-size: 12px; margin-bottom: 6px; }
 .item .text { font-size: 13px; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow: hidden; }
+.item .img { max-width: 100%; max-height: 160px; border-radius: 6px; display: block; }
 .item .actions { display: flex; gap: 8px; margin-top: 6px; }
 .item .btn { padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; background: #f7f7f7; }
 .preview { border-left: 1px solid #eee; padding: 12px; }

@@ -9,5 +9,12 @@ contextBridge.exposeInMainWorld('clipfast', {
   setShortcut: (key) => ipcRenderer.invoke('settings:setShortcut', key),
   pasteText: (text) => clipboard.writeText(text),
   // 一键粘贴：写入剪贴板并触发到前台应用的粘贴
-  pasteToActive: (text) => ipcRenderer.invoke('records:paste', text)
+  pasteToActive: (text) => ipcRenderer.invoke('records:paste', text),
+  undoMove: (id, toIndex) => ipcRenderer.invoke('records:undoMove', id, toIndex)
+})
+
+contextBridge.exposeInMainWorld('clipfastEvents', {
+  onNewRecord: (cb) => ipcRenderer.on('records:new', (_e, rec) => cb && cb(rec)),
+  onMovedRecord: (cb) => ipcRenderer.on('records:moved', (_e, payload) => cb && cb(payload)),
+  onUndoed: (cb) => ipcRenderer.on('records:undoed', (_e, payload) => cb && cb(payload))
 })

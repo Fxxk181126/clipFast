@@ -68,7 +68,14 @@ app.whenReady().then(async () => {
     togglePanel()
   })
 
-  startClipboardWatcher(store)
+  startClipboardWatcher(store, (evt) => {
+    BrowserWindow.getAllWindows().forEach(w => {
+      try {
+        if (evt.kind === 'created') w.webContents.send('records:new', evt.record)
+        else if (evt.kind === 'moved') w.webContents.send('records:moved', { id: evt.id, fromIndex: evt.fromIndex })
+      } catch (e) {}
+    })
+  })
 })
 
 app.on('window-all-closed', () => {
@@ -138,6 +145,23 @@ ipcMain.handle('settings:setShortcut', async (_evt, key) => {
   store.set('settings', settings)
   globalShortcut.unregisterAll()
   globalShortcut.register(key, () => togglePanel())
+  return true
+})
+
+// 撤销移动：将顶部项移回指定索引位置
+ipcMain.handle('records:undoMove', async (_evt, id, toIndex) => {
+  const records = store.get('records')
+  const curIndex = records.findIndex(r => r.id === id)
+  if (curIndex < 0) return false
+  const item = records[curIndex]
+  const arr = [...records]
+  arr.splice(curIndex, 1)
+  const clampIndex = Math.max(0, Math.min(toIndex, arr.length))
+  arr.splice(clampIndex, 0, item)
+  store.set('records', arr)
+  BrowserWindow.getAllWindows().forEach(w => {
+    try { w.webContents.send('records:undoed', { id, toIndex: clampIndex }) } catch (e) {}
+  })
   return true
 })
 

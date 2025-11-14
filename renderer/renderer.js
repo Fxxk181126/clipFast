@@ -1,5 +1,8 @@
 // 简单的状态管理
 let state = { type: 'all', keyword: '', onlyFavorites: false, list: [], active: null }
+let pending = []
+let scheduleId = null
+let lastMove = null
 
 const $ = (sel) => document.querySelector(sel)
 const $$ = (sel) => Array.from(document.querySelectorAll(sel))
@@ -83,6 +86,7 @@ async function init() {
   $('#search').oninput = async (e) => { state.keyword = e.target.value; await refresh() }
   $('#type').onchange = async (e) => { state.type = e.target.value; await refresh() }
   $('#onlyFav').onchange = async (e) => { state.onlyFavorites = e.target.checked; await refresh() }
+  $('#refresh').onclick = async () => { try { await refresh(); showMsg('已刷新') } catch { showMsg('刷新失败') } }
   $$('.cat').forEach(btn => {
     btn.onclick = async () => {
       $$('.cat').forEach(b => b.classList.remove('active'))
@@ -91,7 +95,127 @@ async function init() {
       await refresh()
     }
   })
+  window.clipfastEvents.onNewRecord((rec) => {
+    pending.push(rec)
+    if (scheduleId) return
+    scheduleId = setTimeout(() => {
+      scheduleId = null
+      try {
+        const items = pending.splice(0)
+        applyIncremental(items)
+      } catch { showMsg('更新失败') }
+    }, 250)
+  })
+  window.clipfastEvents.onMovedRecord(({ id, fromIndex }) => {
+    // 若当前筛选能看到该记录，则将其移动到顶部，并提示可撤销
+    const idx = state.list.findIndex(x => x.id === id)
+    if (idx >= 0) {
+      const item = state.list[idx]
+      state.list.splice(idx, 1)
+      state.list.unshift(item)
+      moveDomItemToTop(idx)
+      lastMove = { id, fromIndex }
+      showUndoBanner()
+    } else {
+      // 不在当前筛选结果中，仅提示
+      lastMove = { id, fromIndex }
+      showUndoBanner()
+    }
+  })
+  window.clipfastEvents.onUndoed(({ id, toIndex }) => {
+    refresh().then(() => showMsg('已撤销移动'))
+    lastMove = null
+    removeUndoLink()
+  })
   await refresh()
+}
+
+function applyIncremental(items) {
+  const container = $('#list')
+  if (!items.length) return
+  if (!state.list.length && container.innerHTML.includes('暂无记录')) container.innerHTML = ''
+  for (const rec of items) {
+    if (!matches(rec)) continue
+    const exists = state.list.find(x => x.id === rec.id)
+    if (exists) continue
+    state.list.unshift({ ...rec, __fav: false })
+    if (state.list.length > 500) state.list.length = 500
+    const div = document.createElement('div')
+    div.className = 'item'
+    div.innerHTML = `
+      <div class="meta">
+        <span>${rec.type.toUpperCase()}</span>
+        <span>${new Date(rec.ts).toLocaleString()}</span>
+      </div>
+      <div class="text">${escapeHtml(previewText(rec.text))}</div>
+      <div class="actions">
+        <button class="btn paste">一键粘贴</button>
+        <button class="btn fav">收藏</button>
+        <button class="btn del">删除</button>
+      </div>
+    `
+    div.querySelector('.paste').onclick = () => window.clipfast.pasteToActive(rec.text)
+    div.querySelector('.fav').onclick = async () => { await window.clipfast.favoriteRecord(rec.id, true); await refresh() }
+    div.querySelector('.del').onclick = async () => { await window.clipfast.deleteRecord(rec.id); await refresh() }
+    div.onclick = () => { state.active = rec; renderPreview() }
+    if (container.firstChild) container.insertBefore(div, container.firstChild)
+    else container.appendChild(div)
+    if (container.children.length > 500) container.removeChild(container.lastChild)
+  }
+}
+
+function matches(r) {
+  if (state.type !== 'all' && r.type !== state.type) return false
+  if (state.onlyFavorites) return false
+  const kw = state.keyword.trim().toLowerCase()
+  if (!kw) return true
+  const t = (r.text || '').toLowerCase()
+  const tags = (r.tags || []).join(' ').toLowerCase()
+  return t.includes(kw) || tags.includes(kw)
+}
+
+function showMsg(s, persistent = false) {
+  const el = $('#msg'); if (!el) return
+  el.textContent = s
+  clearTimeout(el.__t)
+  if (persistent || lastMove) return
+  el.__t = setTimeout(() => { if (!lastMove) el.textContent = '' }, 1800)
+}
+
+function showUndoBanner() {
+  showMsg('已将重复内容移动到顶部', true)
+  addUndoLink()
+}
+
+function addUndoLink() {
+  const el = $('#msg'); if (!el) return
+  const link = document.createElement('a')
+  link.href = 'javascript:void(0)'
+  link.style.marginLeft = '6px'
+  link.textContent = '撤销'
+  link.onclick = async () => { if (!lastMove) return; const ok = await window.clipfast.undoMove(lastMove.id, lastMove.fromIndex); if (!ok) showMsg('撤销失败') }
+  removeUndoLink()
+  el.appendChild(link)
+  el.__undo = link
+}
+
+function removeUndoLink() { const el = $('#msg'); if (el && el.__undo) { try { el.removeChild(el.__undo) } catch {} el.__undo = null } }
+
+function moveDomItemToTop(currentIndex) {
+  const container = $('#list')
+  const node = container.children[currentIndex]
+  if (!node) return
+  container.removeChild(node)
+  container.insertBefore(node, container.firstChild)
+}
+
+function moveDomItem(from, to) {
+  const container = $('#list')
+  const node = container.children[from]
+  if (!node) return
+  container.removeChild(node)
+  const ref = container.children[to] || null
+  container.insertBefore(node, ref)
 }
 
 document.addEventListener('DOMContentLoaded', init)

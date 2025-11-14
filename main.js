@@ -9,11 +9,15 @@ let store = null
 let mainWindow = null
 
 function createWindow() {
-  const { width, height } = store.get('settings.panel')
+  const panel = store.get('settings.panel')
+  const width = Math.max(panel.width || 400, 900)
+  const height = Math.max(panel.height || 600, 600)
   mainWindow = new BrowserWindow({
     width,
     height,
     resizable: true,
+    minWidth: 700,
+    minHeight: 400,
     show: false,
     frame: true,
     webPreferences: {
@@ -51,7 +55,7 @@ app.whenReady().then(async () => {
       favorites: [],
       settings: {
         maxRecords: 100000,
-        panel: { width: 400, height: 600 },
+        panel: { width: 900, height: 600 },
         shortcut: 'CommandOrControl+Shift+V'
       }
     }

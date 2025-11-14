@@ -1,17 +1,20 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, clipboard } = require('electron')
+const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, Tray, Menu } = require('electron')
 const path = require('path')
 const { startClipboardWatcher, stopClipboardWatcher } = require('./src/clipboard')
 const { spawn } = require('child_process')
+const fs = require('fs')
 
 // 应用数据存储（持久化到用户目录）
 let store = null
 
 let mainWindow = null
+let tray = null
 
 function createWindow() {
   const panel = store.get('settings.panel')
   const width = Math.max(panel.width || 400, 900)
   const height = Math.max(panel.height || 600, 600)
+  const iconPath = path.join(__dirname, 'assets', 'icon.png')
   mainWindow = new BrowserWindow({
     width,
     height,
@@ -20,6 +23,7 @@ function createWindow() {
     minHeight: 400,
     show: false,
     frame: true,
+    icon: (process.platform === 'win32' || process.platform === 'linux') && fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -68,6 +72,34 @@ app.whenReady().then(async () => {
     togglePanel()
   })
 
+  // macOS Dock 图标设置（运行时覆盖默认 Electron 图标）
+  if (process.platform === 'darwin') {
+    const iconPng = path.join(__dirname, 'assets', 'icon.png')
+    if (fs.existsSync(iconPng)) {
+      const img = nativeImage.createFromPath(iconPng)
+      try { app.dock.setIcon(img) } catch {}
+    }
+  }
+
+  // 顶部状态栏图标（macOS 菜单栏 / Windows 系统托盘）
+  let trayIconPath = path.join(__dirname, 'assets', 'icon.png');
+  let trayImg = nativeImage.createFromPath(trayIconPath)
+  if (trayImg.isEmpty()) trayImg = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png'))
+  if (process.platform === 'darwin') {
+    trayImg = trayImg.resize({ width: 18, height: 18 })
+    trayImg.setTemplateImage(false)
+  }
+  if (tray) tray.destroy()
+  tray = new Tray(trayImg)
+  tray.setToolTip('clipFast')
+  const menu = Menu.buildFromTemplate([
+    { label: '显示/隐藏面板', click: () => togglePanel() },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() }
+  ])
+  tray.setContextMenu(menu)
+  tray.on('click', () => togglePanel())
+
   startClipboardWatcher(store, (evt) => {
     BrowserWindow.getAllWindows().forEach(w => {
       try {
@@ -97,6 +129,7 @@ app.on('activate', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   stopClipboardWatcher()
+  if (tray) tray.destroy()
 })
 
 // 渲染进程与主进程的桥接（检索/删除/收藏/粘贴）

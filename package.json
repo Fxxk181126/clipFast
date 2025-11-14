@@ -5,9 +5,10 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --mac",
-    "dist:win": "electron-builder --win zip",
-    "dist:win:x64": "electron-builder --win zip --x64"
+    "icons": "node scripts/gen-icons.js",
+    "dist": "npm run icons && electron-builder --mac",
+    "dist:win": "npm run icons && electron-builder --win zip",
+    "dist:win:x64": "npm run icons && electron-builder --win zip --x64"
   },
   "author": "",
   "license": "MIT",
@@ -16,11 +17,12 @@
   },
   "devDependencies": {
     "electron": "^31.3.0",
-    "electron-builder": "^24.13.1"
+    "electron-builder": "^24.13.1",
+    "png2icons": "^2.0.1"
   },
   "build": {
     "appId": "com.clipfast.app",
-    "productName": "速贴 ClipFast",
+    "productName": "clipFast",
     "directories": {
       "output": "dist"
     },
@@ -29,10 +31,12 @@
       "preload.js",
       "src/**",
       "renderer/**",
+      "assets/**",
       "package.json"
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
       "target": [
         {
           "target": "dmg"
@@ -40,6 +44,7 @@
       ]
     },
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         {
           "target": "zip"

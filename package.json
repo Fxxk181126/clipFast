@@ -1,0 +1,15 @@
+{
+  "name": "clipfast",
+  "version": "0.1.0",
+  "description": "速贴（ClipFast）桌面端 Electron 应用（V1 核心功能验证）",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^31.3.0",
+    "electron-store": "^9.0.0"
+  }
+}

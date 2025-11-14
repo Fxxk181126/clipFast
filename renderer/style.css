@@ -1,0 +1,19 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+.panel { display: grid; grid-template-columns: 150px 1fr 300px; grid-template-rows: 48px 1fr; height: 100vh; }
+.header { grid-column: 1 / 4; display: flex; gap: 8px; padding: 8px; border-bottom: 1px solid #eee; }
+.header input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; }
+.header select { padding: 8px; min-width: 96px; height: 32px; }
+.fav { display: flex; align-items: center; gap: 6px; }
+.sidebar { padding: 8px; border-right: 1px solid #eee; }
+.sidebar .title { font-weight: 600; margin-bottom: 8px; }
+.cat { display: block; width: 100%; padding: 8px; margin-bottom: 6px; border: 1px solid #ddd; background: #fafafa; border-radius: 6px; cursor: pointer; }
+.cat.active { background: #e6f2ff; border-color: #b3d1ff; }
+.list { overflow: auto; padding: 8px; }
+.item { border: 1px solid #e5e5e5; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff; }
+.item .meta { display: flex; justify-content: space-between; color: #888; font-size: 12px; margin-bottom: 6px; }
+.item .text { font-size: 13px; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow: hidden; }
+.item .actions { display: flex; gap: 8px; margin-top: 6px; }
+.item .btn { padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; background: #f7f7f7; }
+.preview { border-left: 1px solid #eee; padding: 12px; }
+.placeholder { color: #999; }

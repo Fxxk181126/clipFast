@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>速贴 ClipFast</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <header class="header">
+        <input id="search" type="text" placeholder="搜索关键词或标签..." />
+        <select id="type">
+          <option value="all">全部</option>
+          <option value="text">文本</option>
+          <option value="link">链接</option>
+          <option value="code">代码</option>
+        </select>
+        <label class="fav"><input id="onlyFav" type="checkbox" /> 仅收藏</label>
+      </header>
+      <aside class="sidebar">
+        <div class="title">分类</div>
+        <button data-type="all" class="cat active">全部</button>
+        <button data-type="text" class="cat">文本</button>
+        <button data-type="link" class="cat">链接</button>
+        <button data-type="code" class="cat">代码</button>
+      </aside>
+      <main class="list" id="list"></main>
+      <section class="preview" id="preview">
+        <div class="placeholder">选择一条记录查看预览</div>
+      </section>
+    </div>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

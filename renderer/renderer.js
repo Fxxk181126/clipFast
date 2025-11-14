@@ -127,6 +127,11 @@ async function init() {
     lastMove = null
     removeUndoLink()
   })
+  window.clipfastEvents.onPruned(({ ids }) => {
+    if (Array.isArray(ids) && ids.length) {
+      refresh().then(() => showMsg('已清理过期记录'))
+    }
+  })
   await refresh()
 }
 

@@ -67,7 +67,32 @@ function startClipboardWatcher(store, onEvent) {
       hashIndex.set(hash, rec.id)
       if (typeof onEvent === 'function') onEvent({ kind: 'created', record: rec })
     }
+
+    const prune = pruneByAge(store, 3)
+    if (prune.removedIds.length && typeof onEvent === 'function') onEvent({ kind: 'pruned', removedIds: prune.removedIds })
   }, 750)
+}
+
+function pruneByAge(store, days = 3) {
+  const now = Date.now()
+  const threshold = now - days * 86400000
+  const favorites = new Set(store.get('favorites') || [])
+  const records = store.get('records') || []
+  const keep = []
+  const removedIds = []
+  for (const r of records) {
+    if (favorites.has(r.id) || r.ts >= threshold) keep.push(r)
+    else removedIds.push(r.id)
+  }
+  if (removedIds.length) {
+    store.set('records', keep)
+    for (const id of removedIds) {
+      const item = records.find(x => x.id === id)
+      const h = item?.hash || (item?.text ? idOf(item.text) : null)
+      if (h) hashIndex.delete(h)
+    }
+  }
+  return { removedIds }
 }
 
 function stopClipboardWatcher() {
@@ -75,4 +100,4 @@ function stopClipboardWatcher() {
   timer = null
 }
 
-module.exports = { startClipboardWatcher, stopClipboardWatcher }
+module.exports = { startClipboardWatcher, stopClipboardWatcher, pruneByAge }

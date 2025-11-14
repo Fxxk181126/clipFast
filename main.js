@@ -73,6 +73,7 @@ app.whenReady().then(async () => {
       try {
         if (evt.kind === 'created') w.webContents.send('records:new', evt.record)
         else if (evt.kind === 'moved') w.webContents.send('records:moved', { id: evt.id, fromIndex: evt.fromIndex })
+        else if (evt.kind === 'pruned') w.webContents.send('records:pruned', { ids: evt.removedIds })
       } catch (e) {}
     })
   })

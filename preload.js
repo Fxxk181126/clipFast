@@ -16,5 +16,6 @@ contextBridge.exposeInMainWorld('clipfast', {
 contextBridge.exposeInMainWorld('clipfastEvents', {
   onNewRecord: (cb) => ipcRenderer.on('records:new', (_e, rec) => cb && cb(rec)),
   onMovedRecord: (cb) => ipcRenderer.on('records:moved', (_e, payload) => cb && cb(payload)),
-  onUndoed: (cb) => ipcRenderer.on('records:undoed', (_e, payload) => cb && cb(payload))
+  onUndoed: (cb) => ipcRenderer.on('records:undoed', (_e, payload) => cb && cb(payload)),
+  onPruned: (cb) => ipcRenderer.on('records:pruned', (_e, payload) => cb && cb(payload))
 })

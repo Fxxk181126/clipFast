@@ -10,7 +10,8 @@ contextBridge.exposeInMainWorld('clipfast', {
   pasteText: (text) => clipboard.writeText(text),
   // 一键粘贴：写入剪贴板并触发到前台应用的粘贴
   pasteToActive: (text, id) => ipcRenderer.invoke('records:paste', text, id),
-  undoMove: (id, toIndex) => ipcRenderer.invoke('records:undoMove', id, toIndex)
+  undoMove: (id, toIndex) => ipcRenderer.invoke('records:undoMove', id, toIndex),
+  clearRecords: () => ipcRenderer.invoke('records:clear')
 })
 
 contextBridge.exposeInMainWorld('clipfastEvents', {
@@ -22,4 +23,8 @@ contextBridge.exposeInMainWorld('clipfastEvents', {
 
 contextBridge.exposeInMainWorld('clipfastImage', {
   pasteToActive: (dataUrl, id) => ipcRenderer.invoke('records:pasteImage', dataUrl, id)
+})
+
+contextBridge.exposeInMainWorld('clipfastUpload', {
+  video: (filePath, id) => ipcRenderer.invoke('upload:video', filePath, id)
 })

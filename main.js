@@ -242,6 +242,45 @@ ipcMain.handle('records:paste', async (_evt, text, id) => {
   }
 })
 
+ipcMain.handle('upload:video', async (_evt, filePath, id) => {
+  try {
+    if (!filePath) return false
+    if (id) {
+      const records = store.get('records')
+      const idx = records.findIndex(r => r.id === id)
+      if (idx > 0) {
+        const target = records[idx]
+        const next = [target, ...records.slice(0, idx), ...records.slice(idx + 1)]
+        store.set('records', next)
+        BrowserWindow.getAllWindows().forEach(w => { try { w.webContents.send('records:moved', { id: target.id, fromIndex: idx }) } catch (e) {} })
+      }
+    }
+    clipboard.write({ files: [filePath] })
+    
+    if (mainWindow && mainWindow.isVisible()) mainWindow.hide()
+    
+    if (process.platform === 'darwin') {
+      await new Promise((resolve, reject) => {
+        setTimeout(() => {
+          const script = 'tell application "System Events" to keystroke "v" using {command down}'
+          const p = spawn('osascript', ['-e', script])
+          p.on('error', reject)
+          p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('osascript exit ' + code))))
+        }, 120)
+      })
+    }
+    return true
+  } catch (e) {
+    console.error('Video upload error:', e)
+    return false
+  }
+})
+
+ipcMain.handle('records:clear', async () => {
+  store.set('records', [])
+  return true
+})
+
 ipcMain.handle('records:pasteImage', async (_evt, dataUrl, id) => {
   try {
     if (!dataUrl) return false

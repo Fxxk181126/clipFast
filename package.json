@@ -17,7 +17,7 @@
     "electron-store": "^9.0.0"
   },
   "devDependencies": {
-    "electron": "^31.3.0",
+    "electron": "^42.3.0",
     "electron-builder": "^24.13.1",
     "png2icons": "^2.0.1"
   },

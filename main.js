@@ -1,8 +1,24 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, Tray, Menu } = require('electron')
 const path = require('path')
-const { startClipboardWatcher, stopClipboardWatcher, notePastedImageHash, notePastedText } = require('./src/clipboard')
+const {
+  DEFAULT_MAX_RECORDS,
+  startClipboardWatcher,
+  stopClipboardWatcher,
+  moveRecordToTop,
+  moveRecordTo,
+  deleteRecord,
+  clearRecords,
+  notePastedImage,
+  notePastedText
+} = require('./src/clipboard')
+const CH = require('./src/ipc-channels')
 const { spawn } = require('child_process')
 const fs = require('fs')
+
+const ICON_PATH = path.join(__dirname, 'assets', 'icon.png')
+const LIST_CAP = 500
+// 隐藏面板后给系统一次聚焦切换的时间，再发送粘贴键
+const PASTE_FOCUS_DELAY_MS = 120
 
 // 应用数据存储（持久化到用户目录）
 let store = null
@@ -11,10 +27,7 @@ let mainWindow = null
 let tray = null
 
 function createWindow() {
-  const panel = store.get('settings.panel')
-  const width = Math.max(panel.width || 400, 900)
-  const height = Math.max(panel.height || 600, 600)
-  const iconPath = path.join(__dirname, 'assets', 'icon.png')
+  const { width, height } = store.get('settings.panel')
   mainWindow = new BrowserWindow({
     width,
     height,
@@ -23,7 +36,7 @@ function createWindow() {
     minHeight: 400,
     show: false,
     frame: true,
-    icon: (process.platform === 'win32' || process.platform === 'linux') && fs.existsSync(iconPath) ? iconPath : undefined,
+    icon: (process.platform === 'win32' || process.platform === 'linux') && fs.existsSync(ICON_PATH) ? ICON_PATH : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -48,6 +61,41 @@ function togglePanel() {
   }
 }
 
+// 向所有渲染窗口广播主进程事件
+function broadcast(channel, payload) {
+  BrowserWindow.getAllWindows().forEach(w => {
+    try { w.webContents.send(channel, payload) } catch (e) {}
+  })
+}
+
+// 隐藏面板，回到之前的前台应用后发送 Cmd+V
+async function pasteToForeground() {
+  if (mainWindow && mainWindow.isVisible()) mainWindow.hide()
+  if (process.platform !== 'darwin') return true // 其他平台：保留剪贴板，用户手动粘贴（可后续扩展）
+  await new Promise((resolve, reject) => {
+    setTimeout(() => {
+      const script = 'tell application "System Events" to keystroke "v" using {command down}'
+      const p = spawn('osascript', ['-e', script])
+      p.on('error', reject)
+      p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('osascript exit ' + code))))
+    }, PASTE_FOCUS_DELAY_MS)
+  })
+  return true
+}
+
+// 按记录类型写入剪贴板，并抑制轮询器对自身粘贴的重捕获
+function writeRecordToClipboard(record) {
+  if (record.type === 'image') {
+    clipboard.writeImage(nativeImage.createFromDataURL(record.imageData))
+    notePastedImage(record.imageData)
+  } else if (record.type === 'video') {
+    clipboard.write({ files: [record.text] })
+  } else {
+    clipboard.writeText(record.text)
+    notePastedText(record.text)
+  }
+}
+
 app.whenReady().then(async () => {
   // 动态引入 ESM 的 electron-store
   const StoreModule = await import('electron-store')
@@ -58,7 +106,7 @@ app.whenReady().then(async () => {
       records: [],
       favorites: [],
       settings: {
-        maxRecords: 100000,
+        maxRecords: DEFAULT_MAX_RECORDS,
         panel: { width: 900, height: 600 },
         shortcut: 'CommandOrControl+Shift+V'
       }
@@ -74,22 +122,18 @@ app.whenReady().then(async () => {
 
   // macOS Dock 图标设置（运行时覆盖默认 Electron 图标）
   if (process.platform === 'darwin') {
-    const iconPng = path.join(__dirname, 'assets', 'icon.png')
-    if (fs.existsSync(iconPng)) {
-      const img = nativeImage.createFromPath(iconPng)
+    if (fs.existsSync(ICON_PATH)) {
+      const img = nativeImage.createFromPath(ICON_PATH)
       try { app.dock.setIcon(img) } catch {}
     }
   }
 
   // 顶部状态栏图标（macOS 菜单栏 / Windows 系统托盘）
-  let trayIconPath = path.join(__dirname, 'assets', 'icon.png');
-  let trayImg = nativeImage.createFromPath(trayIconPath)
-  if (trayImg.isEmpty()) trayImg = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png'))
+  let trayImg = nativeImage.createFromPath(ICON_PATH)
   if (process.platform === 'darwin') {
     trayImg = trayImg.resize({ width: 18, height: 18 })
     trayImg.setTemplateImage(false)
   }
-  if (tray) tray.destroy()
   tray = new Tray(trayImg)
   tray.setToolTip('clipFast')
   const menu = Menu.buildFromTemplate([
@@ -101,13 +145,9 @@ app.whenReady().then(async () => {
   tray.on('click', () => togglePanel())
 
   startClipboardWatcher(store, (evt) => {
-    BrowserWindow.getAllWindows().forEach(w => {
-      try {
-        if (evt.kind === 'created') w.webContents.send('records:new', evt.record)
-        else if (evt.kind === 'moved') w.webContents.send('records:moved', { id: evt.id, fromIndex: evt.fromIndex })
-        else if (evt.kind === 'pruned') w.webContents.send('records:pruned', { ids: evt.removedIds })
-      } catch (e) {}
-    })
+    if (evt.kind === 'created') broadcast(CH.EV_NEW, evt.record)
+    else if (evt.kind === 'moved') broadcast(CH.EV_MOVED, { id: evt.id, fromIndex: evt.fromIndex })
+    else if (evt.kind === 'pruned') broadcast(CH.EV_PRUNED, { ids: evt.removedIds })
   })
 })
 
@@ -133,7 +173,7 @@ app.on('will-quit', () => {
 })
 
 // 渲染进程与主进程的桥接（检索/删除/收藏/粘贴）
-ipcMain.handle('records:list', async (_evt, query) => {
+ipcMain.handle(CH.RECORDS_LIST, async (_evt, query) => {
   const keyword = (query?.keyword || '').trim().toLowerCase()
   const type = query?.type || 'all'
   const onlyFavorites = !!query?.onlyFavorites
@@ -151,19 +191,13 @@ ipcMain.handle('records:list', async (_evt, query) => {
   }
 
   records.sort((a, b) => b.ts - a.ts)
-  const sliced = records.slice(0, 500)
   // 注入收藏标记，便于前端无额外 IPC 显示收藏状态
-  return sliced.map(r => ({ ...r, __fav: favoritesSet.has(r.id) }))
+  return records.slice(0, LIST_CAP).map(r => ({ ...r, __fav: favoritesSet.has(r.id) }))
 })
 
-ipcMain.handle('records:delete', async (_evt, id) => {
-  const records = store.get('records')
-  const next = records.filter(r => r.id !== id)
-  store.set('records', next)
-  return true
-})
+ipcMain.handle(CH.RECORDS_DELETE, async (_evt, id) => deleteRecord(store, id))
 
-ipcMain.handle('records:favorite', async (_evt, id, fav) => {
+ipcMain.handle(CH.RECORDS_FAVORITE, async (_evt, id, fav) => {
   const favorites = new Set(store.get('favorites'))
   if (fav) favorites.add(id)
   else favorites.delete(id)
@@ -171,8 +205,8 @@ ipcMain.handle('records:favorite', async (_evt, id, fav) => {
   return true
 })
 
-ipcMain.handle('settings:get', async () => store.get('settings'))
-ipcMain.handle('settings:setShortcut', async (_evt, key) => {
+ipcMain.handle(CH.SETTINGS_GET, async () => store.get('settings'))
+ipcMain.handle(CH.SETTINGS_SET_SHORTCUT, async (_evt, key) => {
   // 更新快捷键并重注册
   const settings = store.get('settings')
   settings.shortcut = key
@@ -187,130 +221,31 @@ ipcMain.handle('settings:setShortcut', async (_evt, key) => {
 })
 
 // 撤销移动：将顶部项移回指定索引位置
-ipcMain.handle('records:undoMove', async (_evt, id, toIndex) => {
-  const records = store.get('records')
-  const curIndex = records.findIndex(r => r.id === id)
-  if (curIndex < 0) return false
-  const item = records[curIndex]
-  const arr = [...records]
-  arr.splice(curIndex, 1)
-  const clampIndex = Math.max(0, Math.min(toIndex, arr.length))
-  arr.splice(clampIndex, 0, item)
-  store.set('records', arr)
-  BrowserWindow.getAllWindows().forEach(w => {
-    try { w.webContents.send('records:undoed', { id, toIndex: clampIndex }) } catch (e) {}
-  })
+ipcMain.handle(CH.RECORDS_UNDO_MOVE, async (_evt, id, toIndex) => {
+  const clampIndex = moveRecordTo(store, id, toIndex)
+  if (clampIndex < 0) return false
+  broadcast(CH.EV_UNDOED, { id, toIndex: clampIndex })
   return true
 })
 
-// 一键粘贴：设置剪贴板并向前台应用发送粘贴快捷键
-ipcMain.handle('records:paste', async (_evt, text, id) => {
+// 一键粘贴：写入剪贴板、置顶记录并向前台应用发送粘贴快捷键（类型分派在此处，渲染层只传 id）
+ipcMain.handle(CH.RECORDS_PASTE, async (_evt, id) => {
   try {
-    if (!text) return false
-    if (id) {
-      const records = store.get('records')
-      const idx = records.findIndex(r => r.id === id)
-      if (idx > 0) {
-        const target = records[idx]
-        const next = [target, ...records.slice(0, idx), ...records.slice(idx + 1)]
-        store.set('records', next)
-        BrowserWindow.getAllWindows().forEach(w => { try { w.webContents.send('records:moved', { id: target.id, fromIndex: idx }) } catch (e) {} })
-      }
-    }
-    // 写入剪贴板
-    clipboard.writeText(text)
-    notePastedText(text)
-    // 隐藏面板，回到之前的前台应用窗口
-    if (mainWindow && mainWindow.isVisible()) mainWindow.hide()
+    const record = store.get('records').find(r => r.id === id)
+    if (!record) return false
 
-    // macOS：使用 AppleScript 触发 Command+V
-    if (process.platform === 'darwin') {
-      await new Promise((resolve, reject) => {
-        // 给系统一次聚焦切换的时间
-        setTimeout(() => {
-          const script = 'tell application "System Events" to keystroke "v" using {command down}'
-          const p = spawn('osascript', ['-e', script])
-          p.on('error', reject)
-          p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('osascript exit ' + code))))
-        }, 120)
-      })
-    }
-    // 其他平台：保留剪贴板，用户手动粘贴（可后续扩展）
-    return true
+    writeRecordToClipboard(record)
+
+    const moved = moveRecordToTop(store, id)
+    if (moved) broadcast(CH.EV_MOVED, moved)
+
+    return await pasteToForeground()
   } catch (e) {
     return false
   }
 })
 
-ipcMain.handle('upload:video', async (_evt, filePath, id) => {
-  try {
-    if (!filePath) return false
-    if (id) {
-      const records = store.get('records')
-      const idx = records.findIndex(r => r.id === id)
-      if (idx > 0) {
-        const target = records[idx]
-        const next = [target, ...records.slice(0, idx), ...records.slice(idx + 1)]
-        store.set('records', next)
-        BrowserWindow.getAllWindows().forEach(w => { try { w.webContents.send('records:moved', { id: target.id, fromIndex: idx }) } catch (e) {} })
-      }
-    }
-    clipboard.write({ files: [filePath] })
-    
-    if (mainWindow && mainWindow.isVisible()) mainWindow.hide()
-    
-    if (process.platform === 'darwin') {
-      await new Promise((resolve, reject) => {
-        setTimeout(() => {
-          const script = 'tell application "System Events" to keystroke "v" using {command down}'
-          const p = spawn('osascript', ['-e', script])
-          p.on('error', reject)
-          p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('osascript exit ' + code))))
-        }, 120)
-      })
-    }
-    return true
-  } catch (e) {
-    console.error('Video upload error:', e)
-    return false
-  }
-})
-
-ipcMain.handle('records:clear', async () => {
-  store.set('records', [])
+ipcMain.handle(CH.RECORDS_CLEAR, async () => {
+  clearRecords(store)
   return true
-})
-
-ipcMain.handle('records:pasteImage', async (_evt, dataUrl, id) => {
-  try {
-    if (!dataUrl) return false
-    const img = nativeImage.createFromDataURL(dataUrl)
-    const ihash = require('crypto').createHash('sha1').update(img.toPNG()).digest('hex')
-    if (id) {
-      const records = store.get('records')
-      const idx = records.findIndex(r => r.id === id)
-      if (idx > 0) {
-        const target = records[idx]
-        const next = [target, ...records.slice(0, idx), ...records.slice(idx + 1)]
-        store.set('records', next)
-        BrowserWindow.getAllWindows().forEach(w => { try { w.webContents.send('records:moved', { id: target.id, fromIndex: idx }) } catch (e) {} })
-      }
-    }
-    clipboard.writeImage(img)
-    notePastedImageHash(ihash)
-    if (mainWindow && mainWindow.isVisible()) mainWindow.hide()
-    if (process.platform === 'darwin') {
-      await new Promise((resolve, reject) => {
-        setTimeout(() => {
-          const script = 'tell application "System Events" to keystroke "v" using {command down}'
-          const p = spawn('osascript', ['-e', script])
-          p.on('error', reject)
-          p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('osascript exit ' + code))))
-        }, 120)
-      })
-    }
-    return true
-  } catch (e) {
-    return false
-  }
 })

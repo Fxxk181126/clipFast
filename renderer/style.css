@@ -9,7 +9,7 @@
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   --hover-bg: #f9f9f9;
   --active-bg: #e6f2ff;
-  --active-text: #1677ff;
+  --active-text: var(--primary-color);
 }
 
 * {
@@ -177,7 +177,7 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #666;
+  color: var(--text-secondary);
   margin-left: auto;
   background: #e6f7ff;
   padding: 6px 12px;
@@ -213,7 +213,7 @@ body {
 /* Card */
 .card {
   background: #fff;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 12px;
@@ -253,10 +253,10 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   background: #f0f0f0;
-  color: #666;
+  color: var(--text-secondary);
 }
 
-.card-type-badge.text { background: #e6f7ff; color: #1677ff; }
+.card-type-badge.text { background: #e6f7ff; color: var(--primary-color); }
 .card-type-badge.link { background: #f6ffed; color: #52c41a; }
 .card-type-badge.code { background: #f9f0ff; color: #722ed1; }
 .card-type-badge.image { background: #fff0f6; color: #eb2f96; }
@@ -274,7 +274,7 @@ body {
 .card-text {
   font-size: 14px;
   line-height: 1.5;
-  color: #333;
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 120px;
@@ -312,12 +312,12 @@ body {
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .card-btn:hover {
   background: #f5f5f5;
-  color: #333;
+  color: var(--text-primary);
   border-color: #ccc;
 }
 
@@ -327,10 +327,15 @@ body {
   border-color: #ffa39e;
 }
 
-.card-btn.favorite.active {
+.card-btn.fav.active {
   color: #faad14;
   border-color: #ffe58f;
   background: #fffbe6;
+}
+
+/* CSS fill 覆盖 SVG 的 fill="none" 属性，收藏选中时星星实心 */
+.card-btn.fav.active svg {
+  fill: currentColor;
 }
 
 /* Shortcut Modal (Keep mostly as is, just polish) */
@@ -373,7 +378,7 @@ body {
 }
 
 .label {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -398,7 +403,7 @@ body {
   background: #fff;
   font-family: 'SF Mono', Consolas, monospace;
   font-size: 12px;
-  color: #333;
+  color: var(--text-primary);
   box-shadow: 0 1px 1px rgba(0,0,0,0.05);
 }
 
@@ -432,4 +437,24 @@ body {
 .btn.primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Toast（renderer.js 的 showMsg 使用） */
+#toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 2000;
+  display: none;
+  max-width: 320px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: #e6f7ff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #91caff;
+}
+
+#toast.show {
+  display: block;
 }

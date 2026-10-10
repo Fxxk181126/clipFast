@@ -9,7 +9,7 @@
     "dist": "npm run icons && electron-builder --mac",
     "dist:win": "npm run icons && electron-builder --win zip",
     "dist:win:x64": "npm run icons && electron-builder --win zip --x64",
-    "build": "npm run icons && npm run dist && npm run dist:win && npm run dist:win:x64"
+    "build": "npm run dist && npm run dist:win && npm run dist:win:x64"
   },
   "author": "",
   "license": "MIT",

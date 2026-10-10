@@ -2,7 +2,7 @@ const fs = require('fs')
 const path = require('path')
 const png2icons = require('png2icons')
 
-const source = process.env.CLIPFAST_ICON || '/Users/zhaojiong/workSpace/clipFast/icon.png'
+const source = process.env.CLIPFAST_ICON || path.join(__dirname, '..', 'icon.png')
 const outDir = path.join(__dirname, '..', 'assets')
 
 ;(async () => {

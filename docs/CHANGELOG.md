@@ -4,6 +4,10 @@
 
 ## 2026-10-12
 
+- **fix**: 将工作区最小窗口宽度提高到 800px，避免 700-780px 区间进入折叠布局并造成账号菜单溢出。
+  - 受影响模块：`main.js`、`test/workspace-ui.test.js`
+- **fix**: 修复窄窗口折叠侧栏下账号菜单向左溢出的问题，改由侧栏内侧向右展开。
+  - 受影响模块：`renderer/style.css`、`test/workspace-ui.test.js`
 - **style**: 将账号入口移到侧栏底部账号卡片，登录后展示邮箱和头像缩写；账号菜单改为向上弹出，窄窗口收缩为圆形头像入口，并替换“全部”分类图标避免与“文本”重复。
   - 受影响模块：`renderer/index.html`、`renderer/style.css`、`renderer/renderer.js`、`test/workspace-ui.test.js`
 - **fix**: 应用启动时先创建并显示主窗口，再恢复认证会话；修复 Electron 42 下 `ready-to-show` 未触发导致进程存在但界面不可见的问题。

@@ -1035,11 +1035,11 @@ a:focus-visible {
   }
 
   .account-menu {
-    left: 50%;
+    left: 8px;
     right: auto;
-    width: max-content;
-    max-width: min(232px, calc(100vw - 24px));
-    transform: translateX(-50%);
+    width: 200px;
+    max-width: calc(100vw - 16px);
+    transform: none;
   }
 
   .desc {

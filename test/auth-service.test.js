@@ -2,7 +2,6 @@ const assert = require('node:assert/strict')
 const { test } = require('node:test')
 
 const {
-  assertAuthenticatedSession,
   createAuthService,
   createSessionStorage
 } = require('../src/auth')
@@ -208,14 +207,4 @@ test('createSessionStorage treats a failing safeStorage probe as unavailable', (
   assert.equal(storage.persistable, false)
   assert.equal(saved.size, 0)
   assert.equal(storage.getItem('session'), null)
-})
-
-test('protected data handlers reject an unauthenticated session', () => {
-  const user = { id: 'user-1' }
-  assert.deepEqual(assertAuthenticatedSession({ authenticated: true, user }), user)
-
-  assert.throws(
-    () => assertAuthenticatedSession({ authenticated: false, user: null }),
-    (error) => error.code === 'UNAUTHENTICATED'
-  )
 })

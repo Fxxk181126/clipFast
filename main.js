@@ -13,7 +13,7 @@ const {
   notePastedText
 } = require('./src/clipboard')
 const {
-  assertAuthenticatedSession,
+  AuthError,
   createAuthService,
   createSessionStorage
 } = require('./src/auth')
@@ -37,6 +37,7 @@ let clipboardWatcherActive = false
 
 let mainWindow = null
 let tray = null
+let isQuitting = false
 
 function createWindow() {
   const { width, height } = store.get('settings.panel')
@@ -58,13 +59,22 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'))
 
+  // 叉号只隐藏托盘面板，保留窗口实例，避免销毁过程中快捷键误判可见状态。
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault()
+      mainWindow.hide()
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
 }
 
 function togglePanel() {
-  if (!mainWindow) return
+  if (!mainWindow) createWindow()
+
   if (mainWindow.isVisible()) {
     mainWindow.hide()
   } else {
@@ -124,14 +134,13 @@ function handleAuthChanged(payload) {
   broadcast(CH.EV_AUTH_CHANGED, { user: currentUser })
 }
 
-async function requireAuthenticatedUser() {
-  const session = await authService.getSession()
-  return assertAuthenticatedSession(session)
-}
-
+// 受保护 IPC 只读内存态 currentUser（由 handleAuthChanged 维护），
+// 避免每次调用都触发 session 的磁盘读取与解密。
 function protectedHandler(handler) {
   return async (...args) => {
-    await requireAuthenticatedUser()
+    if (!currentUser) {
+      throw new AuthError('UNAUTHENTICATED', '请先登录后再使用剪贴板功能。')
+    }
     return handler(...args)
   }
 }
@@ -192,10 +201,6 @@ app.whenReady().then(async () => {
 
   createWindow()
 
-  const initialSession = await authService.getSession()
-  currentUser = initialSession.user
-  if (currentUser) startUserClipboardWatcher()
-
   const shortcut = store.get('settings.shortcut')
   globalShortcut.register(shortcut, () => {
     togglePanel()
@@ -219,6 +224,12 @@ app.whenReady().then(async () => {
   tray.setToolTip('clipFast')
   updateTrayMenu()
   tray.on('click', () => togglePanel())
+
+  // 会话恢复可能触发网络令牌刷新，放在最后异步执行，避免阻塞快捷键与托盘注册；
+  // 状态迁移统一走 handleAuthChanged，与登录/登出保持同一入口。
+  authService.getSession().then((session) => {
+    handleAuthChanged({ user: session.user })
+  })
 })
 
 app.on('window-all-closed', () => {
@@ -226,6 +237,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
 })
 
 app.on('activate', () => {

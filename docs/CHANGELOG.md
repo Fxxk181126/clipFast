@@ -4,6 +4,18 @@
 
 ## 2026-10-12
 
+- **refactor**: 简化认证与启动路径——启动会话恢复统一走 `handleAuthChanged` 且不再阻塞快捷键/托盘注册；受保护 IPC 改用内存态 `currentUser` 检查，移除每次调用触发的 session 磁盘读取与解密；删除仅剩单调用者的 `requireAuthenticatedUser` 与 `assertAuthenticatedSession`。
+  - 受影响模块：`main.js`、`src/auth.js`、`test/auth-service.test.js`
+- **refactor**: 邮箱规范化校验提取 `normalizeEmail` 供登录与密码重置复用，消除同文件两处重复。
+  - 受影响模块：`src/auth.js`
+- **refactor**: 渲染层清理——删除 `escapeHtml` 死代码；空状态统一为 `empty-state` 结构（原 `placeholder` 类无对应样式）；`timeAgo` 改布尔分支；操作按钮图标预计算为 `ACTION_ICONS`，避免每张卡片重复正则替换。
+  - 受影响模块：`renderer/renderer.js`
+- **refactor**: 样式清理——删除无引用的 `.brand-mark` 规则与冗余 `font-weight` 分组；合并账号菜单与账号卡片的逐字重复规则；强调/危险色散落字面量收敛为 `:root` token（`--accent-border`、`--danger-hover`、`--text-faint` 等），焦点光环改用 `color-mix(var(--accent))`。
+  - 受影响模块：`renderer/style.css`
+- **test**: 新增沙箱 preload 内联 IPC 通道表与 `src/ipc-channels.js` 的深度相等断言，把"两处需同步修改"的手工约定变为机器强制。
+  - 受影响模块：`test/workspace-ui.test.js`
+- **fix**: 点击叉号时隐藏托盘面板，确保关闭后第一次快捷键即可唤起。
+  - 受影响模块：`main.js`、`test/workspace-ui.test.js`
 - **fix**: 登录页和侧栏品牌标识改用产品图标，替换字母 C 占位符。
   - 受影响模块：`renderer/index.html`、`renderer/style.css`、`test/workspace-ui.test.js`
 - **fix**: 将工作区最小窗口宽度提高到 800px，避免 700-780px 区间进入折叠布局并造成账号菜单溢出。

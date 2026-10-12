@@ -6,6 +6,7 @@ const { test } = require('node:test')
 const markup = readFileSync(join(__dirname, '../renderer/index.html'), 'utf8')
 const styles = readFileSync(join(__dirname, '../renderer/style.css'), 'utf8')
 const mainSource = readFileSync(join(__dirname, '../main.js'), 'utf8')
+const preloadSource = readFileSync(join(__dirname, '../preload.js'), 'utf8')
 
 test('account entry belongs to the sidebar instead of the top toolbar', () => {
   const sidebar = markup.slice(
@@ -57,4 +58,25 @@ test('collapsed account menu stays inside the narrow window', () => {
 test('the supported minimum window width keeps the full workspace layout', () => {
   assert.match(mainSource, /minWidth:\s*800,/)
   assert.match(styles, /@media \(max-width:\s*780px\)/)
+})
+
+test('closing the panel keeps it available for the first shortcut', () => {
+  assert.match(mainSource, /let isQuitting = false/)
+  assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\s*isQuitting = true\s*\}\)/)
+
+  const closeHandler = mainSource.match(/mainWindow\.on\('close', \(event\) => \{[\s\S]*?\}\)/)
+  assert.ok(closeHandler, 'missing panel close handler')
+  assert.match(closeHandler[0], /if \(!isQuitting\)/)
+  assert.match(closeHandler[0], /event\.preventDefault\(\)/)
+  assert.match(closeHandler[0], /mainWindow\.hide\(\)/)
+})
+
+test('sandboxed preload inline IPC channels stay in sync with src/ipc-channels.js', () => {
+  // 沙箱化 preload 无法 require 本地模块，通道名只能内联；
+  // 用深度相等断言强制两份表保持同步，避免新增通道时只改一处。
+  const inline = preloadSource.match(/const CH = (\{[\s\S]*?\n\})/)
+  assert.ok(inline, 'missing inline CH table in preload.js')
+
+  const inlineChannels = new Function(`return ${inline[1]}`)()
+  assert.deepEqual(inlineChannels, require('../src/ipc-channels.js'))
 })

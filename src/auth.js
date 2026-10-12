@@ -29,23 +29,21 @@ function sanitizeUser(user) {
   return sanitized
 }
 
-function validateCredentials(email, password) {
-  const normalizedEmail = String(email || '').trim().toLowerCase()
-  if (!EMAIL_PATTERN.test(normalizedEmail)) {
+function normalizeEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase()
+  if (!EMAIL_PATTERN.test(normalized)) {
     throw new AuthError('INVALID_EMAIL', '请输入有效的邮箱地址。')
   }
+  return normalized
+}
+
+function validateCredentials(email, password) {
+  const normalizedEmail = normalizeEmail(email)
   const normalizedPassword = String(password || '')
   if (normalizedPassword.length < MIN_PASSWORD_LENGTH) {
     throw new AuthError('WEAK_PASSWORD', `密码至少需要 ${MIN_PASSWORD_LENGTH} 位。`)
   }
   return { email: normalizedEmail, password: normalizedPassword }
-}
-
-function assertAuthenticatedSession(session) {
-  if (!session?.authenticated || !session.user) {
-    throw new AuthError('UNAUTHENTICATED', '请先登录后再使用剪贴板功能。')
-  }
-  return session.user
 }
 
 function mapSupabaseAuthError(error, action) {
@@ -208,10 +206,7 @@ function createAuthService({
   async function requestPasswordReset(email) {
     if (!client) return { ok: false, error: unconfiguredState().error }
     try {
-      const normalizedEmail = String(email || '').trim().toLowerCase()
-      if (!EMAIL_PATTERN.test(normalizedEmail)) {
-        throw new AuthError('INVALID_EMAIL', '请输入有效的邮箱地址。')
-      }
+      const normalizedEmail = normalizeEmail(email)
       const { error } = await client.auth.resetPasswordForEmail(normalizedEmail)
       if (error) throw mapSupabaseAuthError(error, 'resetPassword')
       return { ok: true }
@@ -225,7 +220,6 @@ function createAuthService({
 
 module.exports = {
   AuthError,
-  assertAuthenticatedSession,
   createAuthService,
   createSessionStorage,
   sanitizeUser,

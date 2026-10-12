@@ -146,7 +146,7 @@ function renderList() {
   container.innerHTML = ''
 
   if (!state.list.length) {
-    container.innerHTML = '<div class="placeholder">暂无记录</div>'
+    container.innerHTML = '<div class="empty-state"><div class="empty-title">暂无记录</div></div>'
     return
   }
 
@@ -171,16 +171,22 @@ function timeAgo(timestamp) {
 
   const date = new Date(value)
   const now = new Date()
-  const format = date.getFullYear() === now.getFullYear() ? 'MM-DD HH:mm' : 'YYYY-MM-DD HH:mm'
+  const sameYear = date.getFullYear() === now.getFullYear()
   const pad = (n) => String(n).padStart(2, '0')
-  if (format === 'MM-DD HH:mm') {
-    return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-  }
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  return sameYear ? `${monthDay} ${clock}` : `${date.getFullYear()}-${monthDay} ${clock}`
 }
 
 function setIcon(svg, size) {
   return svg.replace(/width="\d+"/, `width="${size}"`).replace(/height="\d+"/, `height="${size}"`)
+}
+
+// 操作按钮尺寸固定，预计算结果避免每张卡片重复做字符串替换
+const ACTION_ICONS = {
+  paste: setIcon(ICONS.paste, 15),
+  star: setIcon(ICONS.star, 15),
+  trash: setIcon(ICONS.trash, 15)
 }
 
 const TYPE_LABELS = {
@@ -239,17 +245,17 @@ function createCardElement(item) {
   const pasteButton = document.createElement('button')
   pasteButton.className = 'icon-action paste'
   pasteButton.title = '一键粘贴'
-  pasteButton.innerHTML = setIcon(ICONS.paste, 15)
+  pasteButton.innerHTML = ACTION_ICONS.paste
 
   const favButton = document.createElement('button')
   favButton.className = `icon-action fav ${isFavorite ? 'active' : ''}`
   favButton.title = isFavorite ? '取消收藏' : '收藏'
-  favButton.innerHTML = setIcon(ICONS.star, 15)
+  favButton.innerHTML = ACTION_ICONS.star
 
   const deleteButton = document.createElement('button')
   deleteButton.className = 'icon-action delete'
   deleteButton.title = '删除'
-  deleteButton.innerHTML = setIcon(ICONS.trash, 15)
+  deleteButton.innerHTML = ACTION_ICONS.trash
 
   actions.append(pasteButton, favButton, deleteButton)
   div.appendChild(actions)
@@ -281,10 +287,6 @@ function createCardElement(item) {
   return div
 }
 
-function escapeHtml(s) {
-  return (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
-}
-
 function previewText(s) {
   const trimmed = (s || '').trim()
   return trimmed.length > 300 ? trimmed.slice(0, 300) + '…' : trimmed
@@ -305,7 +307,7 @@ function applyIncremental(items) {
   const container = $('#list')
   if (!items.length) return
 
-  if (container.querySelector('.placeholder')) {
+  if (container.querySelector('.empty-state')) {
     container.innerHTML = ''
   }
 
@@ -573,8 +575,8 @@ async function initAuth() {
     else showAuth()
   })
 
+  // 未认证时沿用函数开头已展示的登录骨架
   if (session.authenticated) enterApp(session.user)
-  else showAuth()
 }
 
 // Shortcut Modal Logic (Keep mostly as is)

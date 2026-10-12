@@ -15,6 +15,11 @@
   --success-fg: #1f7a3d;
   --danger-bg: #fdebec;
   --danger: #c62f37;
+  --danger-hover: #b0262d;
+  --danger-border: #efb6ba;
+  --accent-border: #bcd2fb;
+  --accent-border-soft: #c9d9fb;
+  --text-faint: #8d95a0;
   --radius-sm: 6px;
   --radius: 8px;
   --radius-lg: 12px;
@@ -97,26 +102,8 @@ a:focus-visible {
   border-radius: 8px;
 }
 
-.brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 18px;
-  font-weight: 800;
-}
-
 .brand-lockup,
 .sidebar-brand {
-  font-weight: 700;
-}
-
-.brand-name,
-.sidebar-app {
   font-weight: 700;
 }
 
@@ -128,13 +115,9 @@ a:focus-visible {
   font-weight: 800;
 }
 
-.brand-copy,
-.sidebar-label {
+.brand-copy {
   margin: 0;
   color: rgba(255, 255, 255, 0.68);
-}
-
-.brand-copy {
   max-width: 320px;
   font-size: 15px;
 }
@@ -241,7 +224,7 @@ a:focus-visible {
 
 .auth-field input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .auth-submit {
@@ -396,7 +379,7 @@ a:focus-visible {
   position: absolute;
   top: 50%;
   left: 11px;
-  color: #8d95a0;
+  color: var(--text-faint);
   transform: translateY(-50%);
 }
 
@@ -414,7 +397,7 @@ a:focus-visible {
 
 .search-box input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .action-btn {
@@ -438,7 +421,7 @@ a:focus-visible {
 }
 
 .action-btn.active {
-  border-color: #bcd2fb;
+  border-color: var(--accent-border);
   background: var(--accent-subtle);
   color: var(--accent);
 }
@@ -477,7 +460,7 @@ a:focus-visible {
 
 .account-card[aria-expanded="true"] {
   background: var(--surface);
-  border-color: #bcd2fb;
+  border-color: var(--accent-border);
   box-shadow: var(--shadow-sm);
 }
 
@@ -495,7 +478,8 @@ a:focus-visible {
   font-weight: 700;
 }
 
-.account-details {
+.account-details,
+.account-menu-details {
   display: grid;
   gap: 1px;
   min-width: 0;
@@ -507,9 +491,6 @@ a:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.account-email {
   color: var(--text);
   font-size: 13px;
   font-weight: 650;
@@ -544,22 +525,6 @@ a:focus-visible {
   background: var(--canvas);
 }
 
-.account-menu-details {
-  display: grid;
-  gap: 1px;
-  min-width: 0;
-}
-
-.account-menu-email {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 650;
-}
-
 .account-menu .account-avatar {
   width: 28px;
   height: 28px;
@@ -589,7 +554,7 @@ a:focus-visible {
   width: fit-content;
   margin-top: 10px;
   padding: 5px 10px;
-  border: 1px solid #c9d9fb;
+  border: 1px solid var(--accent-border-soft);
   border-radius: 999px;
   background: var(--accent-subtle);
   color: var(--accent);
@@ -721,7 +686,7 @@ a:focus-visible {
 }
 
 .row-time {
-  color: #8d95a0;
+  color: var(--text-faint);
   font-size: 12px;
 }
 
@@ -940,14 +905,14 @@ a:focus-visible {
 }
 
 .btn.danger {
-  border-color: #efb6ba;
+  border-color: var(--danger-border);
   background: var(--danger);
   color: #fff;
 }
 
 .btn.danger:hover {
   border-color: var(--danger);
-  background: #b0262d;
+  background: var(--danger-hover);
 }
 
 #toast {
@@ -958,7 +923,7 @@ a:focus-visible {
   display: none;
   max-width: 340px;
   padding: 9px 12px;
-  border: 1px solid #c9d9fb;
+  border: 1px solid var(--accent-border-soft);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);

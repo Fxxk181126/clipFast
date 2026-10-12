@@ -4,6 +4,8 @@
 
 ## 2026-10-12
 
+- **fix**: 登录页和侧栏品牌标识改用产品图标，替换字母 C 占位符。
+  - 受影响模块：`renderer/index.html`、`renderer/style.css`、`test/workspace-ui.test.js`
 - **fix**: 将工作区最小窗口宽度提高到 800px，避免 700-780px 区间进入折叠布局并造成账号菜单溢出。
   - 受影响模块：`main.js`、`test/workspace-ui.test.js`
 - **fix**: 修复窄窗口折叠侧栏下账号菜单向左溢出的问题，改由侧栏内侧向右展开。

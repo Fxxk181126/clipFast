@@ -22,6 +22,17 @@ test('account entry belongs to the sidebar instead of the top toolbar', () => {
   assert.doesNotMatch(toolbar, /class="account-wrap"/)
 })
 
+test('brand lockups use the product icon instead of a letter placeholder', () => {
+  const brandImages = markup.match(/<img[^>]+class="brand-logo[^>]*>/g) || []
+
+  assert.equal(brandImages.length, 2)
+  brandImages.forEach(image => {
+    assert.match(image, /src="\.\.\/assets\/icon\.png"/)
+    assert.doesNotMatch(image, />C</)
+  })
+  assert.doesNotMatch(markup, /class="brand-mark"[^>]*>C</)
+})
+
 test('all and text navigation use distinct icons', () => {
   const extractIcon = (type) => {
     const button = markup.match(new RegExp(`<button data-type="${type}"[\\s\\S]*?</button>`))

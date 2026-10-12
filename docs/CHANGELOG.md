@@ -2,6 +2,28 @@
 
 本文档记录 AI 产生的项目变更。日期格式为 `YYYY-MM-DD`。
 
+## 2026-10-12
+
+- **style**: 按 Figma 设计方向重做登录页与剪贴板工作区 UI，新增品牌分栏登录页、紧凑分类侧栏、记录行悬停操作、账号菜单、时间显示和应用内删除确认弹窗；窗口收窄时保持图标化导航并消除横向溢出。
+  - 受影响模块：`renderer/index.html`、`renderer/renderer.js`、`renderer/style.css`
+- **fix**: 登录初始化改为先显示登录骨架，再恢复会话；会话桥接或状态读取失败时展示明确错误，避免认证初始化期间出现空白窗口。
+  - 受影响模块：`renderer/renderer.js`
+- **fix**: Supabase 配置缺失时在登录、注册和重置表单间保持配置错误提示，避免用户只看到提交按钮禁用却不知道原因。
+  - 受影响模块：`renderer/renderer.js`
+- **chore**: 支持从项目根目录 `.env` 加载认证配置，并新增 `.env.example` 和配置说明；真实配置文件保持 Git 忽略。
+  - 受影响模块：`main.js`、`.env.example`（新增）、`README.md`
+
+## 2026-10-10
+
+- **feat**: 增加强制 Supabase Auth 邮箱密码登录，覆盖注册、登录、退出、会话恢复和忘记密码；登录前不启动剪贴板监控，记录类 IPC 增加认证保护。
+  - 受影响模块：`src/auth.js`（新增）、`main.js`、`preload.js`、`src/ipc-channels.js`、`renderer/index.html`、`renderer/renderer.js`、`renderer/style.css`
+- **test**: 新增认证服务、脱敏用户、确认注册、密码重置、退出和加密会话存储测试；新增 `npm test` 脚本。
+  - 受影响模块：`test/auth-service.test.js`（新增）、`package.json`
+- **docs**: 补充 Supabase 环境变量、账号安全边界和测试说明。
+  - 受影响模块：`README.md`、`docs/CHANGELOG.md`
+- **docs**: 说明环境变量兼容 Supabase 新版 public publishable key。
+  - 受影响模块：`README.md`、`docs/CHANGELOG.md`
+
 ## 2026-10-09
 
 - **build**: 将开发依赖 Electron 从 31.7.7 升级到 42.3.0，解决旧运行时被 macOS 安全机制拦截的问题；本地启动需使用 Node.js 22 或更高版本。
@@ -21,4 +43,3 @@
   - 受影响文件：`renderer/renderer.js`、`renderer/index.html`、`renderer/style.css`
 - **chore**: 删除死代码（无人调用的 `pasteText` 桥、恒假的 `if (tray) tray.destroy()`、加载同一路径的托盘图标 fallback、panel 尺寸双默认值）；`build` 脚本去掉与 dist 系列重复的前置 `npm run icons`；`gen-icons.js` 默认源路径由硬编码本机绝对路径改为 `__dirname` 相对路径；与 `:root` 变量同值的硬编码颜色统一改 `var()` 引用；`assets/icon.png` 路径与 `maxRecords`/列表上限 500 提为命名常量。
   - 受影响文件：`preload.js`、`main.js`、`package.json`、`scripts/gen-icons.js`、`renderer/style.css`
-

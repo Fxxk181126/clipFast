@@ -10,9 +10,15 @@ module.exports = {
   RECORDS_CLEAR: 'records:clear',
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET_SHORTCUT: 'settings:setShortcut',
+  AUTH_SIGN_UP: 'auth:signUp',
+  AUTH_SIGN_IN: 'auth:signIn',
+  AUTH_SIGN_OUT: 'auth:signOut',
+  AUTH_GET_SESSION: 'auth:getSession',
+  AUTH_REQUEST_PASSWORD_RESET: 'auth:requestPasswordReset',
   // 主进程 -> 渲染进程（send/on 事件）
   EV_NEW: 'records:new',
   EV_MOVED: 'records:moved',
   EV_UNDOED: 'records:undoed',
-  EV_PRUNED: 'records:pruned'
+  EV_PRUNED: 'records:pruned',
+  EV_AUTH_CHANGED: 'auth:changed'
 }

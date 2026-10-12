@@ -1,4 +1,5 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, Tray, Menu } = require('electron')
+const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, safeStorage, Tray, Menu } = require('electron')
+const { createClient } = require('@supabase/supabase-js')
 const path = require('path')
 const {
   DEFAULT_MAX_RECORDS,
@@ -11,17 +12,28 @@ const {
   notePastedImage,
   notePastedText
 } = require('./src/clipboard')
+const {
+  assertAuthenticatedSession,
+  createAuthService,
+  createSessionStorage
+} = require('./src/auth')
 const CH = require('./src/ipc-channels')
 const { spawn } = require('child_process')
 const fs = require('fs')
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png')
 const LIST_CAP = 500
+try {
+  process.loadEnvFile(path.join(__dirname, '.env'))
+} catch {}
 // 隐藏面板后给系统一次聚焦切换的时间，再发送粘贴键
 const PASTE_FOCUS_DELAY_MS = 120
 
 // 应用数据存储（持久化到用户目录）
 let store = null
+let authService = null
+let currentUser = null
+let clipboardWatcherActive = false
 
 let mainWindow = null
 let tray = null
@@ -45,6 +57,10 @@ function createWindow() {
   })
 
   mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'))
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show()
+    mainWindow.focus()
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -66,6 +82,62 @@ function broadcast(channel, payload) {
   BrowserWindow.getAllWindows().forEach(w => {
     try { w.webContents.send(channel, payload) } catch (e) {}
   })
+}
+
+function startUserClipboardWatcher() {
+  if (clipboardWatcherActive) return
+  startClipboardWatcher(store, (evt) => {
+    if (evt.kind === 'created') broadcast(CH.EV_NEW, evt.record)
+    else if (evt.kind === 'moved') broadcast(CH.EV_MOVED, { id: evt.id, fromIndex: evt.fromIndex })
+    else if (evt.kind === 'pruned') broadcast(CH.EV_PRUNED, { ids: evt.removedIds })
+  })
+  clipboardWatcherActive = true
+}
+
+function stopUserClipboardWatcher() {
+  if (!clipboardWatcherActive) return
+  stopClipboardWatcher()
+  clipboardWatcherActive = false
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+  const menu = [
+    { label: currentUser ? `当前账号：${currentUser.email}` : '未登录', enabled: false }
+  ]
+  if (currentUser) {
+    menu.push(
+      { type: 'separator' },
+      { label: '退出登录', click: () => authService.signOut() }
+    )
+  }
+  menu.push(
+    { type: 'separator' },
+    { label: '显示/隐藏面板', click: () => togglePanel() },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() }
+  )
+  tray.setContextMenu(Menu.buildFromTemplate(menu))
+}
+
+function handleAuthChanged(payload) {
+  currentUser = payload.user || null
+  if (currentUser) startUserClipboardWatcher()
+  else stopUserClipboardWatcher()
+  updateTrayMenu()
+  broadcast(CH.EV_AUTH_CHANGED, { user: currentUser })
+}
+
+async function requireAuthenticatedUser() {
+  const session = await authService.getSession()
+  return assertAuthenticatedSession(session)
+}
+
+function protectedHandler(handler) {
+  return async (...args) => {
+    await requireAuthenticatedUser()
+    return handler(...args)
+  }
 }
 
 // 隐藏面板，回到之前的前台应用后发送 Cmd+V
@@ -113,6 +185,19 @@ app.whenReady().then(async () => {
     }
   })
 
+  const authStore = new Store({ name: 'clipfast-auth' })
+  authService = createAuthService({
+    supabaseUrl: process.env.CLIPFAST_SUPABASE_URL,
+    supabaseAnonKey: process.env.CLIPFAST_SUPABASE_ANON_KEY,
+    createClient,
+    storage: createSessionStorage({ safeStorage, persistentStore: authStore }),
+    onAuthChanged: handleAuthChanged
+  })
+
+  const initialSession = await authService.getSession()
+  currentUser = initialSession.user
+  if (currentUser) startUserClipboardWatcher()
+
   createWindow()
 
   const shortcut = store.get('settings.shortcut')
@@ -136,19 +221,8 @@ app.whenReady().then(async () => {
   }
   tray = new Tray(trayImg)
   tray.setToolTip('clipFast')
-  const menu = Menu.buildFromTemplate([
-    { label: '显示/隐藏面板', click: () => togglePanel() },
-    { type: 'separator' },
-    { label: '退出', click: () => app.quit() }
-  ])
-  tray.setContextMenu(menu)
+  updateTrayMenu()
   tray.on('click', () => togglePanel())
-
-  startClipboardWatcher(store, (evt) => {
-    if (evt.kind === 'created') broadcast(CH.EV_NEW, evt.record)
-    else if (evt.kind === 'moved') broadcast(CH.EV_MOVED, { id: evt.id, fromIndex: evt.fromIndex })
-    else if (evt.kind === 'pruned') broadcast(CH.EV_PRUNED, { ids: evt.removedIds })
-  })
 })
 
 app.on('window-all-closed', () => {
@@ -168,12 +242,19 @@ app.on('activate', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
-  stopClipboardWatcher()
+  stopUserClipboardWatcher()
   if (tray) tray.destroy()
 })
 
+// 认证操作不要求已有会话；其余 IPC 与剪贴板监控都只对已登录用户开放。
+ipcMain.handle(CH.AUTH_SIGN_UP, async (_evt, email, password) => authService.signUp(email, password))
+ipcMain.handle(CH.AUTH_SIGN_IN, async (_evt, email, password) => authService.signIn(email, password))
+ipcMain.handle(CH.AUTH_SIGN_OUT, async () => authService.signOut())
+ipcMain.handle(CH.AUTH_GET_SESSION, async () => authService.getSession())
+ipcMain.handle(CH.AUTH_REQUEST_PASSWORD_RESET, async (_evt, email) => authService.requestPasswordReset(email))
+
 // 渲染进程与主进程的桥接（检索/删除/收藏/粘贴）
-ipcMain.handle(CH.RECORDS_LIST, async (_evt, query) => {
+ipcMain.handle(CH.RECORDS_LIST, protectedHandler(async (_evt, query) => {
   const keyword = (query?.keyword || '').trim().toLowerCase()
   const type = query?.type || 'all'
   const onlyFavorites = !!query?.onlyFavorites
@@ -193,20 +274,20 @@ ipcMain.handle(CH.RECORDS_LIST, async (_evt, query) => {
   records.sort((a, b) => b.ts - a.ts)
   // 注入收藏标记，便于前端无额外 IPC 显示收藏状态
   return records.slice(0, LIST_CAP).map(r => ({ ...r, __fav: favoritesSet.has(r.id) }))
-})
+}))
 
-ipcMain.handle(CH.RECORDS_DELETE, async (_evt, id) => deleteRecord(store, id))
+ipcMain.handle(CH.RECORDS_DELETE, protectedHandler(async (_evt, id) => deleteRecord(store, id)))
 
-ipcMain.handle(CH.RECORDS_FAVORITE, async (_evt, id, fav) => {
+ipcMain.handle(CH.RECORDS_FAVORITE, protectedHandler(async (_evt, id, fav) => {
   const favorites = new Set(store.get('favorites'))
   if (fav) favorites.add(id)
   else favorites.delete(id)
   store.set('favorites', Array.from(favorites))
   return true
-})
+}))
 
-ipcMain.handle(CH.SETTINGS_GET, async () => store.get('settings'))
-ipcMain.handle(CH.SETTINGS_SET_SHORTCUT, async (_evt, key) => {
+ipcMain.handle(CH.SETTINGS_GET, protectedHandler(async () => store.get('settings')))
+ipcMain.handle(CH.SETTINGS_SET_SHORTCUT, protectedHandler(async (_evt, key) => {
   // 更新快捷键并重注册
   const settings = store.get('settings')
   settings.shortcut = key
@@ -218,18 +299,18 @@ ipcMain.handle(CH.SETTINGS_SET_SHORTCUT, async (_evt, key) => {
   } catch (e) {
     return false
   }
-})
+}))
 
 // 撤销移动：将顶部项移回指定索引位置
-ipcMain.handle(CH.RECORDS_UNDO_MOVE, async (_evt, id, toIndex) => {
+ipcMain.handle(CH.RECORDS_UNDO_MOVE, protectedHandler(async (_evt, id, toIndex) => {
   const clampIndex = moveRecordTo(store, id, toIndex)
   if (clampIndex < 0) return false
   broadcast(CH.EV_UNDOED, { id, toIndex: clampIndex })
   return true
-})
+}))
 
 // 一键粘贴：写入剪贴板、置顶记录并向前台应用发送粘贴快捷键（类型分派在此处，渲染层只传 id）
-ipcMain.handle(CH.RECORDS_PASTE, async (_evt, id) => {
+ipcMain.handle(CH.RECORDS_PASTE, protectedHandler(async (_evt, id) => {
   try {
     const record = store.get('records').find(r => r.id === id)
     if (!record) return false
@@ -243,9 +324,9 @@ ipcMain.handle(CH.RECORDS_PASTE, async (_evt, id) => {
   } catch (e) {
     return false
   }
-})
+}))
 
-ipcMain.handle(CH.RECORDS_CLEAR, async () => {
+ipcMain.handle(CH.RECORDS_CLEAR, protectedHandler(async () => {
   clearRecords(store)
   return true
-})
+}))

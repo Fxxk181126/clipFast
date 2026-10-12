@@ -46,7 +46,7 @@ function createWindow() {
     resizable: true,
     minWidth: 700,
     minHeight: 400,
-    show: false,
+    show: true,
     frame: true,
     icon: (process.platform === 'win32' || process.platform === 'linux') && fs.existsSync(ICON_PATH) ? ICON_PATH : undefined,
     webPreferences: {
@@ -57,10 +57,6 @@ function createWindow() {
   })
 
   mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'))
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show()
-    mainWindow.focus()
-  })
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -194,11 +190,11 @@ app.whenReady().then(async () => {
     onAuthChanged: handleAuthChanged
   })
 
+  createWindow()
+
   const initialSession = await authService.getSession()
   currentUser = initialSession.user
   if (currentUser) startUserClipboardWatcher()
-
-  createWindow()
 
   const shortcut = store.get('settings.shortcut')
   globalShortcut.register(shortcut, () => {

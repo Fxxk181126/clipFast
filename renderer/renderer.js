@@ -59,6 +59,23 @@ function setAuthConfigured(enabled, message = '') {
   $$('.auth-form .auth-submit').forEach(button => { button.disabled = true })
 }
 
+function setAccountMenu(open) {
+  $('#accountMenu').hidden = !open
+  $('#accountButton').setAttribute('aria-expanded', String(open))
+}
+
+function updateAccountIdentity(email = '') {
+  const normalizedEmail = String(email || '').trim()
+  const identity = normalizedEmail || '未登录'
+  const localName = normalizedEmail.split('@')[0] || ''
+  const initials = localName.replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase()
+
+  $('#accountEmail').textContent = identity
+  $('#accountMenuEmail').textContent = identity
+  $('#accountAvatar').textContent = initials || 'C'
+  $('#accountMenuAvatar').textContent = initials || 'C'
+}
+
 let confirmResolver = null
 
 function closeConfirmDialog(result) {
@@ -96,15 +113,15 @@ async function submitAuthAction(button, action) {
 function showAuth() {
   $('#appRoot').hidden = true
   $('#authView').hidden = false
-  $('#accountEmail').textContent = '未登录'
-  $('#accountMenu').hidden = true
+  updateAccountIdentity()
+  setAccountMenu(false)
 }
 
 function enterApp(user) {
   $('#authView').hidden = true
   $('#appRoot').hidden = false
-  $('#accountEmail').textContent = user.email
-  $('#accountMenu').hidden = true
+  updateAccountIdentity(user?.email)
+  setAccountMenu(false)
   if (!appInitialized) {
     appInitialized = true
     init()
@@ -516,14 +533,15 @@ async function initAuth() {
   })
 
   $('#accountButton').onclick = () => {
-    $('#accountMenu').hidden = !$('#accountMenu').hidden
+    setAccountMenu($('#accountMenu').hidden)
   }
 
   document.addEventListener('click', (event) => {
-    if (!event.target.closest('.account-wrap')) $('#accountMenu').hidden = true
+    if (!event.target.closest('.account-wrap')) setAccountMenu(false)
   })
 
   $('#signOutButton').onclick = async () => {
+    setAccountMenu(false)
     await window.clipfastAuth.signOut()
   }
 

@@ -100,7 +100,7 @@
         <nav class="nav-menu">
           <button data-type="all" class="nav-item active">
             <span class="icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"></path><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"></path><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"></path></svg>
             </span>
             <span class="nav-label">全部</span>
           </button>
@@ -135,6 +135,27 @@
             <span class="nav-label">视频</span>
           </button>
         </nav>
+
+        <div class="account-wrap sidebar-footer">
+          <button id="accountButton" class="account-card" aria-haspopup="true" aria-expanded="false">
+            <span id="accountAvatar" class="account-avatar">C</span>
+            <span class="account-details">
+              <span id="accountEmail" class="account-email">未登录</span>
+              <span class="account-status">已登录</span>
+            </span>
+            <svg class="account-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"></polyline></svg>
+          </button>
+          <div id="accountMenu" class="account-menu" hidden>
+            <div class="account-menu-card">
+              <span id="accountMenuAvatar" class="account-avatar">C</span>
+              <span class="account-menu-details">
+                <span id="accountMenuEmail" class="account-menu-email">未登录</span>
+                <span class="account-status">已登录</span>
+              </span>
+            </div>
+            <button id="signOutButton" type="button">退出登录</button>
+          </div>
+        </div>
       </aside>
       
       <main class="main-content">
@@ -159,18 +180,6 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path></svg>
               <span class="action-label">快捷键</span>
             </button>
-
-            <div class="account-wrap">
-              <button id="accountButton" class="account-chip" aria-haspopup="true">
-                <span class="account-avatar">C</span>
-                <span id="accountEmail" class="account-email">未登录</span>
-                <svg class="account-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </button>
-              <div id="accountMenu" class="account-menu" hidden>
-                <div class="account-menu-label">已登录账号</div>
-                <button id="signOutButton" type="button">退出登录</button>
-              </div>
-            </div>
           </div>
 
           <div id="undoMsg" class="undo-msg" style="display: none;">

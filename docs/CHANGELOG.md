@@ -4,6 +4,10 @@
 
 ## 2026-10-12
 
+- **style**: 将账号入口移到侧栏底部账号卡片，登录后展示邮箱和头像缩写；账号菜单改为向上弹出，窄窗口收缩为圆形头像入口，并替换“全部”分类图标避免与“文本”重复。
+  - 受影响模块：`renderer/index.html`、`renderer/style.css`、`renderer/renderer.js`、`test/workspace-ui.test.js`
+- **fix**: 应用启动时先创建并显示主窗口，再恢复认证会话；修复 Electron 42 下 `ready-to-show` 未触发导致进程存在但界面不可见的问题。
+  - 受影响模块：`main.js`
 - **style**: 按 Figma 设计方向重做登录页与剪贴板工作区 UI，新增品牌分栏登录页、紧凑分类侧栏、记录行悬停操作、账号菜单、时间显示和应用内删除确认弹窗；窗口收窄时保持图标化导航并消除横向溢出。
   - 受影响模块：`renderer/index.html`、`renderer/renderer.js`、`renderer/style.css`
 - **fix**: 登录初始化改为先显示登录骨架，再恢复会话；会话桥接或状态读取失败时展示明确错误，避免认证初始化期间出现空白窗口。

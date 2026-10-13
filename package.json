@@ -1,10 +1,11 @@
 {
   "name": "clipfast",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "速贴（ClipFast）桌面端 Electron 应用（V1 核心功能验证）",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "node --test",
     "icons": "node scripts/gen-icons.js",
     "dist": "npm run icons && electron-builder --mac",
     "dist:win": "npm run icons && electron-builder --win zip",
@@ -14,6 +15,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
     "electron-store": "^9.0.0"
   },
   "devDependencies": {
@@ -24,6 +26,12 @@
   "build": {
     "appId": "com.clipfast.app",
     "productName": "clipFast",
+    "protocols": [
+      {
+        "name": "ClipFast Auth",
+        "schemes": ["clipfast"]
+      }
+    ],
     "directories": {
       "output": "dist"
     },

@@ -12,6 +12,8 @@ let toastTimer = null
 let undoStack = [] // 元素为 { id, fromIndex }，栈顶为最近一次置顶
 let undoClosedShown = false
 let shortcutDraft = null
+let appInitialized = false
+let authConfigured = true
 
 // 列表最多保留的可见条数（须与 main.js 的 LIST_CAP 一致）
 const MAX_VISIBLE = 500
@@ -19,6 +21,124 @@ const SEARCH_DEBOUNCE_MS = 250
 
 const $ = (sel) => document.querySelector(sel)
 const $$ = (sel) => Array.from(document.querySelectorAll(sel))
+
+function showAuthMessage(notice = '', error = '') {
+  const noticeEl = $('#authNotice')
+  const errorEl = $('#authError')
+  noticeEl.textContent = notice
+  noticeEl.hidden = !notice
+  errorEl.textContent = error
+  errorEl.hidden = !error
+}
+
+// 注册与重置两个表单共用的"两次密码一致"预校验
+function passwordsMatch(passwordSel, confirmSel) {
+  if ($(passwordSel).value !== $(confirmSel).value) {
+    showAuthMessage('', '两次输入的密码不一致。')
+    return false
+  }
+  return true
+}
+
+function switchAuthMode(mode) {
+  $('#showLogin').classList.toggle('active', mode === 'login')
+  $('#showRegister').classList.toggle('active', mode === 'register')
+  $('#loginForm').hidden = mode !== 'login'
+  $('#registerForm').hidden = mode !== 'register'
+  $('#resetForm').hidden = mode !== 'reset'
+  $('#recoveryForm').hidden = mode !== 'recovery'
+  $('#authTabs').hidden = mode === 'recovery'
+  const headings = {
+    login: ['登录 ClipFast', '使用邮箱密码继续'],
+    register: ['创建 ClipFast 账号', '注册后可在本机使用全部功能'],
+    reset: ['重置密码', '输入注册邮箱，我们会发送重置链接'],
+    recovery: ['设置新密码', '请输入新密码完成重置']
+  }
+  const [title, description] = headings[mode] || headings.login
+  $('#authTitle').textContent = title
+  $('#authDescription').textContent = description
+  // 配置错误必须跨登录/注册/重置页持续展示，否则用户会看到按钮禁用但找不到原因。
+  if (authConfigured) showAuthMessage()
+}
+
+function setAuthConfigured(enabled, message = '') {
+  authConfigured = enabled
+  if (enabled) {
+    showAuthMessage()
+    return
+  }
+  showAuthMessage('', message)
+  $$('.auth-form .auth-submit').forEach(button => { button.disabled = true })
+}
+
+function setAccountMenu(open) {
+  $('#accountMenu').hidden = !open
+  $('#accountButton').setAttribute('aria-expanded', String(open))
+}
+
+function updateAccountIdentity(email = '') {
+  const normalizedEmail = String(email || '').trim()
+  const identity = normalizedEmail || '未登录'
+  const localName = normalizedEmail.split('@')[0] || ''
+  const initials = localName.replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase()
+
+  $('#accountEmail').textContent = identity
+  $('#accountMenuEmail').textContent = identity
+  $('#accountAvatar').textContent = initials || 'C'
+  $('#accountMenuAvatar').textContent = initials || 'C'
+}
+
+let confirmResolver = null
+
+function closeConfirmDialog(result) {
+  if (!confirmResolver) return
+  const resolve = confirmResolver
+  confirmResolver = null
+  $('#confirmModal').classList.remove('show')
+  resolve(result)
+}
+
+function confirmAction({ title, message, actionLabel = '删除' }) {
+  closeConfirmDialog(false)
+  $('#confirmTitle').textContent = title
+  $('#confirmMessage').textContent = message
+  $('#confirmAction').textContent = actionLabel
+  $('#confirmModal').classList.add('show')
+  return new Promise(resolve => {
+    confirmResolver = resolve
+    $('#confirmAction').focus()
+  })
+}
+
+async function submitAuthAction(button, action) {
+  const originalText = button.textContent
+  button.disabled = true
+  button.textContent = '处理中...'
+  try {
+    return await action()
+  } finally {
+    button.textContent = originalText
+    button.disabled = false
+  }
+}
+
+function showAuth() {
+  $('#appRoot').hidden = true
+  $('#authView').hidden = false
+  updateAccountIdentity()
+  setAccountMenu(false)
+}
+
+function enterApp(user) {
+  $('#authView').hidden = true
+  $('#appRoot').hidden = false
+  updateAccountIdentity(user?.email)
+  setAccountMenu(false)
+  if (!appInitialized) {
+    appInitialized = true
+    init()
+  }
+}
 
 // 卡片操作按钮图标（与 index.html 顶栏图标保持一致）
 const ICONS = {
@@ -38,7 +158,7 @@ function renderList() {
   container.innerHTML = ''
 
   if (!state.list.length) {
-    container.innerHTML = '<div class="placeholder">暂无记录</div>'
+    container.innerHTML = '<div class="empty-state">暂无记录</div>'
     return
   }
 
@@ -48,72 +168,135 @@ function renderList() {
   })
 }
 
+function timeAgo(timestamp) {
+  const value = Number(timestamp)
+  if (!Number.isFinite(value)) return ''
+
+  const diff = Date.now() - value
+  const minute = 60 * 1000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diff < minute) return '刚刚'
+  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
+  if (diff < day) return `${Math.floor(diff / hour)} 小时前`
+  if (diff < day * 2) return '昨天'
+
+  const date = new Date(value)
+  const now = new Date()
+  const sameYear = date.getFullYear() === now.getFullYear()
+  const pad = (n) => String(n).padStart(2, '0')
+  const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  return sameYear ? `${monthDay} ${clock}` : `${date.getFullYear()}-${monthDay} ${clock}`
+}
+
+function setIcon(svg, size) {
+  return svg.replace(/width="\d+"/, `width="${size}"`).replace(/height="\d+"/, `height="${size}"`)
+}
+
+// 操作按钮尺寸固定，预计算结果避免每张卡片重复做字符串替换
+const ACTION_ICONS = {
+  paste: setIcon(ICONS.paste, 15),
+  star: setIcon(ICONS.star, 15),
+  trash: setIcon(ICONS.trash, 15)
+}
+
+const TYPE_LABELS = {
+  text: '文本',
+  link: '链接',
+  code: '代码',
+  image: '图片',
+  video: '视频'
+}
+
 // Create a single card element
 function createCardElement(item) {
-  const div = document.createElement('div')
-  div.className = 'card'
+  const div = document.createElement('article')
+  div.className = 'clip-row'
   div.id = `item-${item.id}`
+  div.tabIndex = 0
 
-  // Content HTML
-  let contentHtml = ''
+  const preview = document.createElement('div')
+  preview.className = 'row-preview'
   if (item.type === 'image') {
-    contentHtml = `<img class="card-img" src="${item.imageData}" alt="Image Preview" />`
+    const img = document.createElement('img')
+    img.className = 'row-image'
+    img.alt = '剪贴板图片预览'
+    img.src = item.imageData || ''
+    preview.appendChild(img)
   } else {
-    contentHtml = `<div class="card-text">${escapeHtml(previewText(item.text))}</div>`
+    preview.classList.add(item.type === 'code' ? 'mono' : 'text')
+    preview.textContent = previewText(item.text)
   }
 
   // Fav Status（新捕获的记录必然不是收藏，refresh 时由主进程注入 __fav）
   const isFavorite = !!item.__fav
+  const recordType = item.type || 'text'
 
-  div.innerHTML = `
-    <div class="card-header">
-      <span class="card-type-badge ${item.type || 'text'}">${item.type.toUpperCase()}</span>
-      <span class="card-time">${new Date(item.ts).toLocaleString()}</span>
-    </div>
-    <div class="card-content">
-      ${contentHtml}
-    </div>
-    <div class="card-actions">
-      <button class="card-btn paste" title="一键粘贴">
-        ${ICONS.paste}
-        一键粘贴
-      </button>
-      <button class="card-btn fav ${isFavorite ? 'active' : ''}" title="${isFavorite ? '取消收藏' : '收藏'}">
-        ${ICONS.star}
-        ${isFavorite ? '已收藏' : '收藏'}
-      </button>
-      <button class="card-btn delete" title="删除">
-        ${ICONS.trash}
-        删除
-      </button>
-    </div>
-  `
+  const meta = document.createElement('div')
+  meta.className = 'row-meta'
+
+  const badge = document.createElement('span')
+  badge.className = `type-badge ${recordType}`
+  badge.textContent = TYPE_LABELS[recordType] || recordType
+
+  const time = document.createElement('span')
+  time.className = 'row-time'
+  time.textContent = timeAgo(item.ts)
+
+  meta.append(badge, time)
+
+  const main = document.createElement('div')
+  main.className = 'row-main'
+  main.append(meta, preview)
+  div.appendChild(main)
+
+  const actions = document.createElement('div')
+  actions.className = 'row-actions'
+
+  const pasteButton = document.createElement('button')
+  pasteButton.className = 'icon-action paste'
+  pasteButton.title = '一键粘贴'
+  pasteButton.innerHTML = ACTION_ICONS.paste
+
+  const favButton = document.createElement('button')
+  favButton.className = `icon-action fav ${isFavorite ? 'active' : ''}`
+  favButton.title = isFavorite ? '取消收藏' : '收藏'
+  favButton.innerHTML = ACTION_ICONS.star
+
+  const deleteButton = document.createElement('button')
+  deleteButton.className = 'icon-action delete'
+  deleteButton.title = '删除'
+  deleteButton.innerHTML = ACTION_ICONS.trash
+
+  actions.append(pasteButton, favButton, deleteButton)
+  div.appendChild(actions)
 
   // Event Listeners
-  div.querySelector('.paste').onclick = (e) => {
+  pasteButton.onclick = (e) => {
     e.stopPropagation()
     window.clipfast.pasteToActive(item.id)
   }
 
-  div.querySelector('.fav').onclick = async (e) => {
+  favButton.onclick = async (e) => {
     e.stopPropagation()
     await window.clipfast.favoriteRecord(item.id, !item.__fav)
     await refresh()
   }
 
-  div.querySelector('.delete').onclick = async (e) => {
+  deleteButton.onclick = async (e) => {
     e.stopPropagation()
-    if (confirm('确定要删除这条记录吗？')) {
+    const confirmed = await confirmAction({
+      title: '删除这条记录？',
+      message: '删除后无法恢复。'
+    })
+    if (confirmed) {
       await window.clipfast.deleteRecord(item.id)
       await refresh()
     }
   }
 
   return div
-}
-
-function escapeHtml(s) {
-  return (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
 }
 
 function previewText(s) {
@@ -136,7 +319,7 @@ function applyIncremental(items) {
   const container = $('#list')
   if (!items.length) return
 
-  if (container.querySelector('.placeholder')) {
+  if (container.querySelector('.empty-state')) {
     container.innerHTML = ''
   }
 
@@ -220,7 +403,12 @@ async function init() {
 
   // Clear All
   $('#clearAll').onclick = async () => {
-    if (confirm('确定要清空所有记录吗？此操作不可恢复。')) {
+    const confirmed = await confirmAction({
+      title: '清空所有记录？',
+      message: '本地保存的全部剪贴板记录都会被删除，此操作不可恢复。',
+      actionLabel: '清空'
+    })
+    if (confirmed) {
       await window.clipfast.clearRecords()
       await refresh()
       showMsg('所有记录已清空')
@@ -292,6 +480,131 @@ async function init() {
   })
 
   await refresh()
+}
+
+async function initAuth() {
+  // 先展示登录骨架，避免会话恢复请求卡住时窗口保持空白。
+  showAuth()
+
+  const modeButtons = [
+    ['#showLogin', () => switchAuthMode('login')],
+    ['#showRegister', () => switchAuthMode('register')],
+    ['#showReset', () => switchAuthMode('reset')],
+    ['#showLoginFromRegister', () => switchAuthMode('login')],
+    ['#showLoginFromReset', () => switchAuthMode('login')]
+  ]
+  modeButtons.forEach(([selector, onClick]) => { $(selector).onclick = onClick })
+
+  $('#loginForm').addEventListener('submit', async (event) => {
+    event.preventDefault()
+    showAuthMessage()
+    const result = await submitAuthAction(event.submitter, () => window.clipfastAuth.signIn(
+      $('#loginEmail').value,
+      $('#loginPassword').value
+    ))
+    if (!result.ok) {
+      showAuthMessage('', result.error.message)
+      return
+    }
+    enterApp(result.user)
+  })
+
+  $('#registerForm').addEventListener('submit', async (event) => {
+    event.preventDefault()
+    showAuthMessage()
+    if (!passwordsMatch('#registerPassword', '#registerConfirmPassword')) return
+    const result = await submitAuthAction(event.submitter, () => window.clipfastAuth.signUp(
+      $('#registerEmail').value,
+      $('#registerPassword').value
+    ))
+    if (!result.ok) {
+      showAuthMessage('', result.error.message)
+      return
+    }
+    if (result.status === 'confirmation_required') {
+      switchAuthMode('login')
+      showAuthMessage('确认邮件已发送，请确认邮箱后再登录。')
+      return
+    }
+    enterApp(result.user)
+  })
+
+  $('#resetForm').addEventListener('submit', async (event) => {
+    event.preventDefault()
+    showAuthMessage()
+    const result = await submitAuthAction(event.submitter, () => window.clipfastAuth.requestPasswordReset(
+      $('#resetEmail').value
+    ))
+    if (!result.ok) {
+      showAuthMessage('', result.error.message)
+      return
+    }
+    switchAuthMode('login')
+    showAuthMessage('重置邮件已发送，请按邮件指引设置新密码。')
+  })
+
+  $('#recoveryForm').addEventListener('submit', async (event) => {
+    event.preventDefault()
+    showAuthMessage()
+    if (!passwordsMatch('#recoveryPassword', '#recoveryConfirmPassword')) return
+    const result = await submitAuthAction(event.submitter, () => window.clipfastAuth.updatePassword(
+      $('#recoveryPassword').value
+    ))
+    if (!result.ok) {
+      showAuthMessage('', result.error.message)
+      return
+    }
+    switchAuthMode('login')
+    showAuthMessage('密码已更新，请使用新密码登录。')
+  })
+
+  window.clipfastAuth.onRecovery(() => {
+    switchAuthMode('recovery')
+  })
+
+  $('#accountButton').onclick = () => {
+    setAccountMenu($('#accountMenu').hidden)
+  }
+
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.account-wrap')) setAccountMenu(false)
+  })
+
+  $('#signOutButton').onclick = async () => {
+    setAccountMenu(false)
+    await window.clipfastAuth.signOut()
+  }
+
+  $('#confirmCancel').onclick = () => closeConfirmDialog(false)
+  $('#confirmAction').onclick = () => closeConfirmDialog(true)
+  $('#confirmModal').onclick = (event) => {
+    if (event.target === $('#confirmModal')) closeConfirmDialog(false)
+  }
+
+  if (!window.clipfastAuth) {
+    setAuthConfigured(false, '认证服务初始化失败，请重启应用。')
+    return
+  }
+
+  let session
+  try {
+    session = await window.clipfastAuth.getSession()
+  } catch {
+    setAuthConfigured(false, '无法读取登录状态，请重启应用。')
+    return
+  }
+  if (!session.configured) {
+    setAuthConfigured(false, session.error?.message || '认证服务未配置，请设置 CLIPFAST_SUPABASE_URL 和 CLIPFAST_SUPABASE_ANON_KEY。')
+    return
+  }
+
+  window.clipfastAuth.onAuthChanged(({ user }) => {
+    if (user) enterApp(user)
+    else showAuth()
+  })
+
+  // 未认证时沿用函数开头已展示的登录骨架
+  if (session.authenticated) enterApp(session.user)
 }
 
 // Shortcut Modal Logic (Keep mostly as is)
@@ -372,4 +685,4 @@ function renderKeys(acc, elId) {
   })
 }
 
-document.addEventListener('DOMContentLoaded', init)
+document.addEventListener('DOMContentLoaded', initAuth)

@@ -1,4 +1,5 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, Tray, Menu } = require('electron')
+const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, safeStorage, Tray, Menu } = require('electron')
+const { createClient } = require('@supabase/supabase-js')
 const path = require('path')
 const {
   DEFAULT_MAX_RECORDS,
@@ -11,20 +12,81 @@ const {
   notePastedImage,
   notePastedText
 } = require('./src/clipboard')
+const {
+  AuthError,
+  createAuthService,
+  createSessionStorage
+} = require('./src/auth')
 const CH = require('./src/ipc-channels')
 const { spawn } = require('child_process')
 const fs = require('fs')
 
+// 生产默认走已部署的 Cloudflare Worker 代理；开发时 .env 可覆盖为直连或本地 Worker。
+const DEFAULT_AUTH_PROXY_URL = 'https://clipfast-auth-proxy.clipfast-auth-proxy.workers.dev'
+
+function resolveAuthConfig() {
+  const proxyUrl = process.env.CLIPFAST_AUTH_PROXY_URL || DEFAULT_AUTH_PROXY_URL
+  return { supabaseUrl: proxyUrl, supabaseAnonKey: 'proxy' }
+}
+
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png')
 const LIST_CAP = 500
+try {
+  process.loadEnvFile(path.join(__dirname, '.env'))
+} catch {}
 // 隐藏面板后给系统一次聚焦切换的时间，再发送粘贴键
 const PASTE_FOCUS_DELAY_MS = 120
 
 // 应用数据存储（持久化到用户目录）
 let store = null
+let authService = null
+let currentUser = null
+let clipboardWatcherActive = false
 
 let mainWindow = null
 let tray = null
+let isQuitting = false
+let pendingRecovery = false
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
+
+// 恢复深链只需判定"是否为密码重置回调"——token 留在链接里由 Supabase 客户端消费，
+// 渲染层事件仅作为"展示新密码表单"的信号，不携带任何数据。
+function isRecoveryUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl)
+    if (url.protocol !== 'clipfast:') return false
+    return url.searchParams.get('type') === 'recovery' && Boolean(url.searchParams.get('access_token'))
+  } catch {
+    return false
+  }
+}
+
+function handleDeepLink(rawUrl) {
+  if (!isRecoveryUrl(rawUrl)) return
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    broadcast(CH.EV_AUTH_RECOVERY)
+  } else {
+    pendingRecovery = true
+  }
+}
+
+if (!app.isDefaultProtocolClient('clipfast')) {
+  app.setAsDefaultProtocolClient('clipfast')
+}
+
+app.on('second-instance', (_event, argv) => {
+  const url = argv.find(arg => arg.startsWith('clipfast://'))
+  if (url) handleDeepLink(url)
+})
+
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  handleDeepLink(url)
+})
 
 function createWindow() {
   const { width, height } = store.get('settings.panel')
@@ -32,9 +94,9 @@ function createWindow() {
     width,
     height,
     resizable: true,
-    minWidth: 700,
+    minWidth: 800,
     minHeight: 400,
-    show: false,
+    show: true,
     frame: true,
     icon: (process.platform === 'win32' || process.platform === 'linux') && fs.existsSync(ICON_PATH) ? ICON_PATH : undefined,
     webPreferences: {
@@ -46,13 +108,22 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'))
 
+  // 叉号只隐藏托盘面板，保留窗口实例，避免销毁过程中快捷键误判可见状态。
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault()
+      mainWindow.hide()
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
 }
 
 function togglePanel() {
-  if (!mainWindow) return
+  if (!mainWindow) createWindow()
+
   if (mainWindow.isVisible()) {
     mainWindow.hide()
   } else {
@@ -66,6 +137,61 @@ function broadcast(channel, payload) {
   BrowserWindow.getAllWindows().forEach(w => {
     try { w.webContents.send(channel, payload) } catch (e) {}
   })
+}
+
+function startUserClipboardWatcher() {
+  if (clipboardWatcherActive) return
+  startClipboardWatcher(store, (evt) => {
+    if (evt.kind === 'created') broadcast(CH.EV_NEW, evt.record)
+    else if (evt.kind === 'moved') broadcast(CH.EV_MOVED, { id: evt.id, fromIndex: evt.fromIndex })
+    else if (evt.kind === 'pruned') broadcast(CH.EV_PRUNED, { ids: evt.removedIds })
+  })
+  clipboardWatcherActive = true
+}
+
+function stopUserClipboardWatcher() {
+  if (!clipboardWatcherActive) return
+  stopClipboardWatcher()
+  clipboardWatcherActive = false
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+  const menu = [
+    { label: currentUser ? `当前账号：${currentUser.email}` : '未登录', enabled: false }
+  ]
+  if (currentUser) {
+    menu.push(
+      { type: 'separator' },
+      { label: '退出登录', click: () => authService.signOut() }
+    )
+  }
+  menu.push(
+    { type: 'separator' },
+    { label: '显示/隐藏面板', click: () => togglePanel() },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() }
+  )
+  tray.setContextMenu(Menu.buildFromTemplate(menu))
+}
+
+function handleAuthChanged(payload) {
+  currentUser = payload.user || null
+  if (currentUser) startUserClipboardWatcher()
+  else stopUserClipboardWatcher()
+  updateTrayMenu()
+  broadcast(CH.EV_AUTH_CHANGED, { user: currentUser })
+}
+
+// 受保护 IPC 只读内存态 currentUser（由 handleAuthChanged 维护），
+// 避免每次调用都触发 session 的磁盘读取与解密。
+function protectedHandler(handler) {
+  return async (...args) => {
+    if (!currentUser) {
+      throw new AuthError('UNAUTHENTICATED', '请先登录后再使用剪贴板功能。')
+    }
+    return handler(...args)
+  }
 }
 
 // 隐藏面板，回到之前的前台应用后发送 Cmd+V
@@ -113,6 +239,16 @@ app.whenReady().then(async () => {
     }
   })
 
+  const authStore = new Store({ name: 'clipfast-auth' })
+  const authConfig = resolveAuthConfig()
+  authService = createAuthService({
+    supabaseUrl: authConfig.supabaseUrl,
+    supabaseAnonKey: authConfig.supabaseAnonKey,
+    createClient,
+    storage: createSessionStorage({ safeStorage, persistentStore: authStore }),
+    onAuthChanged: handleAuthChanged
+  })
+
   createWindow()
 
   const shortcut = store.get('settings.shortcut')
@@ -136,18 +272,17 @@ app.whenReady().then(async () => {
   }
   tray = new Tray(trayImg)
   tray.setToolTip('clipFast')
-  const menu = Menu.buildFromTemplate([
-    { label: '显示/隐藏面板', click: () => togglePanel() },
-    { type: 'separator' },
-    { label: '退出', click: () => app.quit() }
-  ])
-  tray.setContextMenu(menu)
+  updateTrayMenu()
   tray.on('click', () => togglePanel())
 
-  startClipboardWatcher(store, (evt) => {
-    if (evt.kind === 'created') broadcast(CH.EV_NEW, evt.record)
-    else if (evt.kind === 'moved') broadcast(CH.EV_MOVED, { id: evt.id, fromIndex: evt.fromIndex })
-    else if (evt.kind === 'pruned') broadcast(CH.EV_PRUNED, { ids: evt.removedIds })
+  // 会话恢复可能触发网络令牌刷新，放在最后异步执行，避免阻塞快捷键与托盘注册；
+  // 状态迁移统一走 handleAuthChanged，与登录/登出保持同一入口。
+  authService.getSession().then((session) => {
+    handleAuthChanged({ user: session.user })
+    if (pendingRecovery) {
+      broadcast(CH.EV_AUTH_RECOVERY)
+      pendingRecovery = false
+    }
   })
 })
 
@@ -156,6 +291,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
 })
 
 app.on('activate', () => {
@@ -168,12 +307,20 @@ app.on('activate', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
-  stopClipboardWatcher()
+  stopUserClipboardWatcher()
   if (tray) tray.destroy()
 })
 
+// 认证操作不要求已有会话；其余 IPC 与剪贴板监控都只对已登录用户开放。
+ipcMain.handle(CH.AUTH_SIGN_UP, async (_evt, email, password) => authService.signUp(email, password))
+ipcMain.handle(CH.AUTH_SIGN_IN, async (_evt, email, password) => authService.signIn(email, password))
+ipcMain.handle(CH.AUTH_SIGN_OUT, async () => authService.signOut())
+ipcMain.handle(CH.AUTH_GET_SESSION, async () => authService.getSession())
+ipcMain.handle(CH.AUTH_REQUEST_PASSWORD_RESET, async (_evt, email) => authService.requestPasswordReset(email))
+ipcMain.handle(CH.AUTH_UPDATE_PASSWORD, async (_evt, newPassword) => authService.updatePassword(newPassword))
+
 // 渲染进程与主进程的桥接（检索/删除/收藏/粘贴）
-ipcMain.handle(CH.RECORDS_LIST, async (_evt, query) => {
+ipcMain.handle(CH.RECORDS_LIST, protectedHandler(async (_evt, query) => {
   const keyword = (query?.keyword || '').trim().toLowerCase()
   const type = query?.type || 'all'
   const onlyFavorites = !!query?.onlyFavorites
@@ -193,20 +340,20 @@ ipcMain.handle(CH.RECORDS_LIST, async (_evt, query) => {
   records.sort((a, b) => b.ts - a.ts)
   // 注入收藏标记，便于前端无额外 IPC 显示收藏状态
   return records.slice(0, LIST_CAP).map(r => ({ ...r, __fav: favoritesSet.has(r.id) }))
-})
+}))
 
-ipcMain.handle(CH.RECORDS_DELETE, async (_evt, id) => deleteRecord(store, id))
+ipcMain.handle(CH.RECORDS_DELETE, protectedHandler(async (_evt, id) => deleteRecord(store, id)))
 
-ipcMain.handle(CH.RECORDS_FAVORITE, async (_evt, id, fav) => {
+ipcMain.handle(CH.RECORDS_FAVORITE, protectedHandler(async (_evt, id, fav) => {
   const favorites = new Set(store.get('favorites'))
   if (fav) favorites.add(id)
   else favorites.delete(id)
   store.set('favorites', Array.from(favorites))
   return true
-})
+}))
 
-ipcMain.handle(CH.SETTINGS_GET, async () => store.get('settings'))
-ipcMain.handle(CH.SETTINGS_SET_SHORTCUT, async (_evt, key) => {
+ipcMain.handle(CH.SETTINGS_GET, protectedHandler(async () => store.get('settings')))
+ipcMain.handle(CH.SETTINGS_SET_SHORTCUT, protectedHandler(async (_evt, key) => {
   // 更新快捷键并重注册
   const settings = store.get('settings')
   settings.shortcut = key
@@ -218,18 +365,18 @@ ipcMain.handle(CH.SETTINGS_SET_SHORTCUT, async (_evt, key) => {
   } catch (e) {
     return false
   }
-})
+}))
 
 // 撤销移动：将顶部项移回指定索引位置
-ipcMain.handle(CH.RECORDS_UNDO_MOVE, async (_evt, id, toIndex) => {
+ipcMain.handle(CH.RECORDS_UNDO_MOVE, protectedHandler(async (_evt, id, toIndex) => {
   const clampIndex = moveRecordTo(store, id, toIndex)
   if (clampIndex < 0) return false
   broadcast(CH.EV_UNDOED, { id, toIndex: clampIndex })
   return true
-})
+}))
 
 // 一键粘贴：写入剪贴板、置顶记录并向前台应用发送粘贴快捷键（类型分派在此处，渲染层只传 id）
-ipcMain.handle(CH.RECORDS_PASTE, async (_evt, id) => {
+ipcMain.handle(CH.RECORDS_PASTE, protectedHandler(async (_evt, id) => {
   try {
     const record = store.get('records').find(r => r.id === id)
     if (!record) return false
@@ -243,9 +390,9 @@ ipcMain.handle(CH.RECORDS_PASTE, async (_evt, id) => {
   } catch (e) {
     return false
   }
-})
+}))
 
-ipcMain.handle(CH.RECORDS_CLEAR, async () => {
+ipcMain.handle(CH.RECORDS_CLEAR, protectedHandler(async () => {
   clearRecords(store)
   return true
-})
+}))

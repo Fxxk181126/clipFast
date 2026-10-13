@@ -1,0 +1,11 @@
+name = "clipfast-auth-proxy"
+main = "index.js"
+compatibility_date = "2024-12-01"
+
+# SUPABASE_URL and SUPABASE_ANON_KEY must be set via secrets:
+#   npx wrangler secret put SUPABASE_URL
+#   npx wrangler secret put SUPABASE_ANON_KEY
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "17f720c55b4740949f67bc6a1634c189"

@@ -19,6 +19,8 @@
 
 ## 2026-10-12
 
+- **chore**: 版本号升级到 1.0.0，通过 PR #1 合并到 main，打 tag `v1.0.0`，构建 macOS arm64 DMG 和 Windows x64 ZIP，发布到 GitHub Releases。
+  - 受影响模块：`package.json`、`dist/clipFast-1.0.0-arm64.dmg`、`dist/ClipFast-1.0.0-win-x64.zip`
 - **fix**: 打包后认证配置丢失——Worker 代理 URL 硬编码为生产默认值，不再依赖 `.env` 文件；开发时通过 `.env` 设置 `CLIPFAST_AUTH_PROXY_URL` 可覆盖。
   - 受影响模块：`main.js`
 - **feat**: 实现 `clipfast://auth/callback` 深链接密码重置流程——Electron 注册自定义协议并监听 `open-url`/`second-instance` 事件；密码重置邮件的 `redirectTo` 指向深链接；渲染层新增"设置新密码"表单；`package.json` 声明协议注册。

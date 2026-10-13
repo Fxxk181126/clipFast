@@ -37,12 +37,16 @@ function normalizeEmail(email) {
   return normalized
 }
 
+function assertPasswordStrength(password) {
+  if (String(password || '').length < MIN_PASSWORD_LENGTH) {
+    throw new AuthError('WEAK_PASSWORD', `密码至少需要 ${MIN_PASSWORD_LENGTH} 位。`)
+  }
+}
+
 function validateCredentials(email, password) {
   const normalizedEmail = normalizeEmail(email)
   const normalizedPassword = String(password || '')
-  if (normalizedPassword.length < MIN_PASSWORD_LENGTH) {
-    throw new AuthError('WEAK_PASSWORD', `密码至少需要 ${MIN_PASSWORD_LENGTH} 位。`)
-  }
+  assertPasswordStrength(normalizedPassword)
   return { email: normalizedEmail, password: normalizedPassword }
 }
 
@@ -220,9 +224,7 @@ function createAuthService({
   async function updatePassword(newPassword) {
     if (!client) return { ok: false, error: unconfiguredState().error }
     try {
-      if (String(newPassword || '').length < MIN_PASSWORD_LENGTH) {
-        throw new AuthError('WEAK_PASSWORD', `密码至少需要 ${MIN_PASSWORD_LENGTH} 位。`)
-      }
+      assertPasswordStrength(newPassword)
       const { error } = await client.auth.updateUser({ password: newPassword })
       if (error) throw mapSupabaseAuthError(error, 'updatePassword')
       return { ok: true }

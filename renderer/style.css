@@ -18,7 +18,6 @@
   --danger-hover: #b0262d;
   --danger-border: #efb6ba;
   --accent-border: #bcd2fb;
-  --accent-border-soft: #c9d9fb;
   --text-faint: #8d95a0;
   --radius-sm: 6px;
   --radius: 8px;
@@ -554,7 +553,7 @@ a:focus-visible {
   width: fit-content;
   margin-top: 10px;
   padding: 5px 10px;
-  border: 1px solid var(--accent-border-soft);
+  border: 1px solid var(--accent-border);
   border-radius: 999px;
   background: var(--accent-subtle);
   color: var(--accent);
@@ -594,15 +593,10 @@ a:focus-visible {
   display: grid;
   place-items: center;
   min-height: 280px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.empty-title {
-  margin-bottom: 4px;
+  color: var(--text);
   font-size: 16px;
   font-weight: 650;
-  color: var(--text);
+  text-align: center;
 }
 
 .clip-row {
@@ -923,7 +917,7 @@ a:focus-visible {
   display: none;
   max-width: 340px;
   padding: 9px 12px;
-  border: 1px solid var(--accent-border-soft);
+  border: 1px solid var(--accent-border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);

@@ -2,8 +2,25 @@
 
 本文档记录 AI 产生的项目变更。日期格式为 `YYYY-MM-DD`。
 
+## 2026-10-13
+
+### 2026-10-13 变更简化复审（/simplify）
+
+- **refactor**: 提取 `assertPasswordStrength` 供 `validateCredentials` 与 `updatePassword` 共用，消除同文件三处弱密码校验重复（与既有 `normalizeEmail` 对称）。
+  - 受影响模块：`src/auth.js`
+- **refactor**: 恢复深链退化为纯布尔信号——`parseRecoveryUrl` 改为 `isRecoveryUrl`（token 在渲染层无消费者，事件不携带死数据）；两处手写窗口发送守卫统一复用 `broadcast()`，消除同文件第三种发送惯用法；自定义协议注册加 `isDefaultProtocolClient` 守卫，避免每次启动重复写 OS 注册。
+  - 受影响模块：`main.js`、`preload.js`
+- **refactor**: Worker 放行路由与限流规则由两张平行表合并为单一 `ROUTES` 表，一次前缀匹配同时完成放行判断与限流规则解析，删除 `resolveRateLimit`（新增路由不再需要同步改两处）。
+  - 受影响模块：`worker/index.js`
+- **refactor**: 渲染层简化——`#authTabs` 由内联 `style.display` 改为与其他表单一致的 `hidden` 属性；提取 `passwordsMatch` 消除注册/重置两处逐字重复的"两次密码不一致"校验；空状态由双层结构收敛为单元素。
+  - 受影响模块：`renderer/renderer.js`
+- **style**: 删除 `.empty-title` 规则（字号/字重并入 `.empty-state`，`margin-bottom` 无兄弟元素属死样式）；色差肉眼不可辨且语义角色相同的 `--accent-border-soft` 并入 `--accent-border`。
+  - 受影响模块：`renderer/style.css`
+
 ## 2026-10-12
 
+- **fix**: 打包后认证配置丢失——Worker 代理 URL 硬编码为生产默认值，不再依赖 `.env` 文件；开发时通过 `.env` 设置 `CLIPFAST_AUTH_PROXY_URL` 可覆盖。
+  - 受影响模块：`main.js`
 - **feat**: 实现 `clipfast://auth/callback` 深链接密码重置流程——Electron 注册自定义协议并监听 `open-url`/`second-instance` 事件；密码重置邮件的 `redirectTo` 指向深链接；渲染层新增"设置新密码"表单；`package.json` 声明协议注册。
   - 受影响模块：`main.js`、`src/auth.js`、`src/ipc-channels.js`、`preload.js`、`renderer/index.html`、`renderer/renderer.js`、`package.json`
 - **chore**: Worker 限流生效——创建 Cloudflare KV namespace `RATE_LIMIT`（id: `17f720c55b4740949f67bc6a1634c189`）并绑定到 `wrangler.toml`，注册 5 次/小时/IP、登录 20 次/分钟/IP、重置 3 次/小时/IP。

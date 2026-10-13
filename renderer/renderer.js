@@ -31,6 +31,15 @@ function showAuthMessage(notice = '', error = '') {
   errorEl.hidden = !error
 }
 
+// 注册与重置两个表单共用的"两次密码一致"预校验
+function passwordsMatch(passwordSel, confirmSel) {
+  if ($(passwordSel).value !== $(confirmSel).value) {
+    showAuthMessage('', '两次输入的密码不一致。')
+    return false
+  }
+  return true
+}
+
 function switchAuthMode(mode) {
   $('#showLogin').classList.toggle('active', mode === 'login')
   $('#showRegister').classList.toggle('active', mode === 'register')
@@ -38,7 +47,7 @@ function switchAuthMode(mode) {
   $('#registerForm').hidden = mode !== 'register'
   $('#resetForm').hidden = mode !== 'reset'
   $('#recoveryForm').hidden = mode !== 'recovery'
-  $('#authTabs').style.display = mode === 'recovery' ? 'none' : ''
+  $('#authTabs').hidden = mode === 'recovery'
   const headings = {
     login: ['登录 ClipFast', '使用邮箱密码继续'],
     register: ['创建 ClipFast 账号', '注册后可在本机使用全部功能'],
@@ -149,7 +158,7 @@ function renderList() {
   container.innerHTML = ''
 
   if (!state.list.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-title">暂无记录</div></div>'
+    container.innerHTML = '<div class="empty-state">暂无记录</div>'
     return
   }
 
@@ -503,10 +512,7 @@ async function initAuth() {
   $('#registerForm').addEventListener('submit', async (event) => {
     event.preventDefault()
     showAuthMessage()
-    if ($('#registerPassword').value !== $('#registerConfirmPassword').value) {
-      showAuthMessage('', '两次输入的密码不一致。')
-      return
-    }
+    if (!passwordsMatch('#registerPassword', '#registerConfirmPassword')) return
     const result = await submitAuthAction(event.submitter, () => window.clipfastAuth.signUp(
       $('#registerEmail').value,
       $('#registerPassword').value
@@ -540,10 +546,7 @@ async function initAuth() {
   $('#recoveryForm').addEventListener('submit', async (event) => {
     event.preventDefault()
     showAuthMessage()
-    if ($('#recoveryPassword').value !== $('#recoveryConfirmPassword').value) {
-      showAuthMessage('', '两次输入的密码不一致。')
-      return
-    }
+    if (!passwordsMatch('#recoveryPassword', '#recoveryConfirmPassword')) return
     const result = await submitAuthAction(event.submitter, () => window.clipfastAuth.updatePassword(
       $('#recoveryPassword').value
     ))

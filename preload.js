@@ -54,5 +54,5 @@ contextBridge.exposeInMainWorld('clipfastAuth', {
   requestPasswordReset: (email) => ipcRenderer.invoke(CH.AUTH_REQUEST_PASSWORD_RESET, email),
   updatePassword: (newPassword) => ipcRenderer.invoke(CH.AUTH_UPDATE_PASSWORD, newPassword),
   onAuthChanged: (cb) => ipcRenderer.on(CH.EV_AUTH_CHANGED, (_e, payload) => cb && cb(payload)),
-  onRecovery: (cb) => ipcRenderer.on(CH.EV_AUTH_RECOVERY, (_e, payload) => cb && cb(payload))
+  onRecovery: (cb) => ipcRenderer.on(CH.EV_AUTH_RECOVERY, () => cb && cb())
 })

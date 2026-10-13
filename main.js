@@ -21,15 +21,12 @@ const CH = require('./src/ipc-channels')
 const { spawn } = require('child_process')
 const fs = require('fs')
 
+// 生产默认走已部署的 Cloudflare Worker 代理；开发时 .env 可覆盖为直连或本地 Worker。
+const DEFAULT_AUTH_PROXY_URL = 'https://clipfast-auth-proxy.clipfast-auth-proxy.workers.dev'
+
 function resolveAuthConfig() {
-  const proxyUrl = process.env.CLIPFAST_AUTH_PROXY_URL
-  if (proxyUrl) {
-    return { supabaseUrl: proxyUrl, supabaseAnonKey: 'proxy' }
-  }
-  return {
-    supabaseUrl: process.env.CLIPFAST_SUPABASE_URL,
-    supabaseAnonKey: process.env.CLIPFAST_SUPABASE_ANON_KEY
-  }
+  const proxyUrl = process.env.CLIPFAST_AUTH_PROXY_URL || DEFAULT_AUTH_PROXY_URL
+  return { supabaseUrl: proxyUrl, supabaseAnonKey: 'proxy' }
 }
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png')
@@ -49,37 +46,37 @@ let clipboardWatcherActive = false
 let mainWindow = null
 let tray = null
 let isQuitting = false
-let pendingRecoveryUrl = null
+let pendingRecovery = false
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
   app.quit()
 }
 
-function parseRecoveryUrl(rawUrl) {
+// 恢复深链只需判定"是否为密码重置回调"——token 留在链接里由 Supabase 客户端消费，
+// 渲染层事件仅作为"展示新密码表单"的信号，不携带任何数据。
+function isRecoveryUrl(rawUrl) {
   try {
     const url = new URL(rawUrl)
-    if (url.protocol !== 'clipfast:') return null
-    const accessToken = url.searchParams.get('access_token')
-    const type = url.searchParams.get('type')
-    if (accessToken && type === 'recovery') {
-      return { accessToken, type }
-    }
-  } catch {}
-  return null
-}
-
-function handleDeepLink(rawUrl) {
-  const recovery = parseRecoveryUrl(rawUrl)
-  if (!recovery) return
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(CH.EV_AUTH_RECOVERY, recovery)
-  } else {
-    pendingRecoveryUrl = recovery
+    if (url.protocol !== 'clipfast:') return false
+    return url.searchParams.get('type') === 'recovery' && Boolean(url.searchParams.get('access_token'))
+  } catch {
+    return false
   }
 }
 
-app.setAsDefaultProtocolClient('clipfast')
+function handleDeepLink(rawUrl) {
+  if (!isRecoveryUrl(rawUrl)) return
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    broadcast(CH.EV_AUTH_RECOVERY)
+  } else {
+    pendingRecovery = true
+  }
+}
+
+if (!app.isDefaultProtocolClient('clipfast')) {
+  app.setAsDefaultProtocolClient('clipfast')
+}
 
 app.on('second-instance', (_event, argv) => {
   const url = argv.find(arg => arg.startsWith('clipfast://'))
@@ -282,9 +279,9 @@ app.whenReady().then(async () => {
   // 状态迁移统一走 handleAuthChanged，与登录/登出保持同一入口。
   authService.getSession().then((session) => {
     handleAuthChanged({ user: session.user })
-    if (pendingRecoveryUrl) {
-      mainWindow?.webContents?.send(CH.EV_AUTH_RECOVERY, pendingRecoveryUrl)
-      pendingRecoveryUrl = null
+    if (pendingRecovery) {
+      broadcast(CH.EV_AUTH_RECOVERY)
+      pendingRecovery = false
     }
   })
 })

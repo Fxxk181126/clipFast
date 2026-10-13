@@ -1,15 +1,10 @@
-const ALLOWED_PREFIXES = [
-  '/auth/v1/signup',
-  '/auth/v1/token',
-  '/auth/v1/logout',
-  '/auth/v1/user',
-  '/auth/v1/recover'
-]
-
-const RATE_LIMITS = [
+// 放行路由与限流规则共用一张表；未标注 requests 的路由回落到默认限流。
+const ROUTES = [
   { prefix: '/auth/v1/signup', requests: 5, windowSeconds: 3600 },
   { prefix: '/auth/v1/token', requests: 20, windowSeconds: 60 },
-  { prefix: '/auth/v1/recover', requests: 3, windowSeconds: 3600 }
+  { prefix: '/auth/v1/recover', requests: 3, windowSeconds: 3600 },
+  { prefix: '/auth/v1/logout' },
+  { prefix: '/auth/v1/user' }
 ]
 
 const DEFAULT_RATE_LIMIT = { requests: 60, windowSeconds: 60 }
@@ -38,13 +33,13 @@ export default {
       return jsonResponse({ error: 'proxy_misconfigured' }, 500)
     }
 
-    if (!ALLOWED_PREFIXES.some(prefix => path.startsWith(prefix))) {
+    const route = ROUTES.find(r => path.startsWith(r.prefix))
+    if (!route) {
       return jsonResponse({ error: 'not_found' }, 404)
     }
 
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
-    const limit = resolveRateLimit(path)
-    const allowed = await checkRateLimit(env, ip, path, limit)
+    const allowed = await checkRateLimit(env, ip, path, route.requests ? route : DEFAULT_RATE_LIMIT)
     if (!allowed) {
       return jsonResponse({ error: 'rate_limited', msg: 'Too many requests. Try again later.' }, 429)
     }
@@ -84,13 +79,6 @@ function jsonResponse(data, status) {
     status,
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
   })
-}
-
-function resolveRateLimit(path) {
-  for (const rule of RATE_LIMITS) {
-    if (path.startsWith(rule.prefix)) return rule
-  }
-  return DEFAULT_RATE_LIMIT
 }
 
 async function checkRateLimit(env, ip, path, limit) {

@@ -207,7 +207,9 @@ function createAuthService({
     if (!client) return { ok: false, error: unconfiguredState().error }
     try {
       const normalizedEmail = normalizeEmail(email)
-      const { error } = await client.auth.resetPasswordForEmail(normalizedEmail)
+      const { error } = await client.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: 'clipfast://auth/callback'
+      })
       if (error) throw mapSupabaseAuthError(error, 'resetPassword')
       return { ok: true }
     } catch (error) {
@@ -215,7 +217,21 @@ function createAuthService({
     }
   }
 
-  return { signIn, signUp, signOut, getSession, requestPasswordReset }
+  async function updatePassword(newPassword) {
+    if (!client) return { ok: false, error: unconfiguredState().error }
+    try {
+      if (String(newPassword || '').length < MIN_PASSWORD_LENGTH) {
+        throw new AuthError('WEAK_PASSWORD', `密码至少需要 ${MIN_PASSWORD_LENGTH} 位。`)
+      }
+      const { error } = await client.auth.updateUser({ password: newPassword })
+      if (error) throw mapSupabaseAuthError(error, 'updatePassword')
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: authFailure(error) }
+    }
+  }
+
+  return { signIn, signUp, signOut, getSession, requestPasswordReset, updatePassword }
 }
 
 module.exports = {

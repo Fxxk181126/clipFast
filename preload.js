@@ -16,11 +16,13 @@ const CH = {
   AUTH_SIGN_OUT: 'auth:signOut',
   AUTH_GET_SESSION: 'auth:getSession',
   AUTH_REQUEST_PASSWORD_RESET: 'auth:requestPasswordReset',
+  AUTH_UPDATE_PASSWORD: 'auth:updatePassword',
   EV_NEW: 'records:new',
   EV_MOVED: 'records:moved',
   EV_UNDOED: 'records:undoed',
   EV_PRUNED: 'records:pruned',
-  EV_AUTH_CHANGED: 'auth:changed'
+  EV_AUTH_CHANGED: 'auth:changed',
+  EV_AUTH_RECOVERY: 'auth:recovery'
 }
 
 // 暴露安全 API 给渲染进程
@@ -50,5 +52,7 @@ contextBridge.exposeInMainWorld('clipfastAuth', {
   signOut: () => ipcRenderer.invoke(CH.AUTH_SIGN_OUT),
   getSession: () => ipcRenderer.invoke(CH.AUTH_GET_SESSION),
   requestPasswordReset: (email) => ipcRenderer.invoke(CH.AUTH_REQUEST_PASSWORD_RESET, email),
-  onAuthChanged: (cb) => ipcRenderer.on(CH.EV_AUTH_CHANGED, (_e, payload) => cb && cb(payload))
+  updatePassword: (newPassword) => ipcRenderer.invoke(CH.AUTH_UPDATE_PASSWORD, newPassword),
+  onAuthChanged: (cb) => ipcRenderer.on(CH.EV_AUTH_CHANGED, (_e, payload) => cb && cb(payload)),
+  onRecovery: (cb) => ipcRenderer.on(CH.EV_AUTH_RECOVERY, (_e, payload) => cb && cb(payload))
 })

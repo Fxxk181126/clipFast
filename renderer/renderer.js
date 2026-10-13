@@ -37,10 +37,13 @@ function switchAuthMode(mode) {
   $('#loginForm').hidden = mode !== 'login'
   $('#registerForm').hidden = mode !== 'register'
   $('#resetForm').hidden = mode !== 'reset'
+  $('#recoveryForm').hidden = mode !== 'recovery'
+  $('#authTabs').style.display = mode === 'recovery' ? 'none' : ''
   const headings = {
     login: ['登录 ClipFast', '使用邮箱密码继续'],
     register: ['创建 ClipFast 账号', '注册后可在本机使用全部功能'],
-    reset: ['重置密码', '输入注册邮箱，我们会发送重置链接']
+    reset: ['重置密码', '输入注册邮箱，我们会发送重置链接'],
+    recovery: ['设置新密码', '请输入新密码完成重置']
   }
   const [title, description] = headings[mode] || headings.login
   $('#authTitle').textContent = title
@@ -532,6 +535,28 @@ async function initAuth() {
     }
     switchAuthMode('login')
     showAuthMessage('重置邮件已发送，请按邮件指引设置新密码。')
+  })
+
+  $('#recoveryForm').addEventListener('submit', async (event) => {
+    event.preventDefault()
+    showAuthMessage()
+    if ($('#recoveryPassword').value !== $('#recoveryConfirmPassword').value) {
+      showAuthMessage('', '两次输入的密码不一致。')
+      return
+    }
+    const result = await submitAuthAction(event.submitter, () => window.clipfastAuth.updatePassword(
+      $('#recoveryPassword').value
+    ))
+    if (!result.ok) {
+      showAuthMessage('', result.error.message)
+      return
+    }
+    switchAuthMode('login')
+    showAuthMessage('密码已更新，请使用新密码登录。')
+  })
+
+  window.clipfastAuth.onRecovery(() => {
+    switchAuthMode('recovery')
   })
 
   $('#accountButton').onclick = () => {

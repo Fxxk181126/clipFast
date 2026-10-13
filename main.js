@@ -21,6 +21,17 @@ const CH = require('./src/ipc-channels')
 const { spawn } = require('child_process')
 const fs = require('fs')
 
+function resolveAuthConfig() {
+  const proxyUrl = process.env.CLIPFAST_AUTH_PROXY_URL
+  if (proxyUrl) {
+    return { supabaseUrl: proxyUrl, supabaseAnonKey: 'proxy' }
+  }
+  return {
+    supabaseUrl: process.env.CLIPFAST_SUPABASE_URL,
+    supabaseAnonKey: process.env.CLIPFAST_SUPABASE_ANON_KEY
+  }
+}
+
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png')
 const LIST_CAP = 500
 try {
@@ -38,6 +49,47 @@ let clipboardWatcherActive = false
 let mainWindow = null
 let tray = null
 let isQuitting = false
+let pendingRecoveryUrl = null
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
+
+function parseRecoveryUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl)
+    if (url.protocol !== 'clipfast:') return null
+    const accessToken = url.searchParams.get('access_token')
+    const type = url.searchParams.get('type')
+    if (accessToken && type === 'recovery') {
+      return { accessToken, type }
+    }
+  } catch {}
+  return null
+}
+
+function handleDeepLink(rawUrl) {
+  const recovery = parseRecoveryUrl(rawUrl)
+  if (!recovery) return
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(CH.EV_AUTH_RECOVERY, recovery)
+  } else {
+    pendingRecoveryUrl = recovery
+  }
+}
+
+app.setAsDefaultProtocolClient('clipfast')
+
+app.on('second-instance', (_event, argv) => {
+  const url = argv.find(arg => arg.startsWith('clipfast://'))
+  if (url) handleDeepLink(url)
+})
+
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  handleDeepLink(url)
+})
 
 function createWindow() {
   const { width, height } = store.get('settings.panel')
@@ -191,9 +243,10 @@ app.whenReady().then(async () => {
   })
 
   const authStore = new Store({ name: 'clipfast-auth' })
+  const authConfig = resolveAuthConfig()
   authService = createAuthService({
-    supabaseUrl: process.env.CLIPFAST_SUPABASE_URL,
-    supabaseAnonKey: process.env.CLIPFAST_SUPABASE_ANON_KEY,
+    supabaseUrl: authConfig.supabaseUrl,
+    supabaseAnonKey: authConfig.supabaseAnonKey,
     createClient,
     storage: createSessionStorage({ safeStorage, persistentStore: authStore }),
     onAuthChanged: handleAuthChanged
@@ -229,6 +282,10 @@ app.whenReady().then(async () => {
   // 状态迁移统一走 handleAuthChanged，与登录/登出保持同一入口。
   authService.getSession().then((session) => {
     handleAuthChanged({ user: session.user })
+    if (pendingRecoveryUrl) {
+      mainWindow?.webContents?.send(CH.EV_AUTH_RECOVERY, pendingRecoveryUrl)
+      pendingRecoveryUrl = null
+    }
   })
 })
 
@@ -263,6 +320,7 @@ ipcMain.handle(CH.AUTH_SIGN_IN, async (_evt, email, password) => authService.sig
 ipcMain.handle(CH.AUTH_SIGN_OUT, async () => authService.signOut())
 ipcMain.handle(CH.AUTH_GET_SESSION, async () => authService.getSession())
 ipcMain.handle(CH.AUTH_REQUEST_PASSWORD_RESET, async (_evt, email) => authService.requestPasswordReset(email))
+ipcMain.handle(CH.AUTH_UPDATE_PASSWORD, async (_evt, newPassword) => authService.updatePassword(newPassword))
 
 // 渲染进程与主进程的桥接（检索/删除/收藏/粘贴）
 ipcMain.handle(CH.RECORDS_LIST, protectedHandler(async (_evt, query) => {

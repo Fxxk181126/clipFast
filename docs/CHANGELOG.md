@@ -4,6 +4,14 @@
 
 ## 2026-10-12
 
+- **feat**: 实现 `clipfast://auth/callback` 深链接密码重置流程——Electron 注册自定义协议并监听 `open-url`/`second-instance` 事件；密码重置邮件的 `redirectTo` 指向深链接；渲染层新增"设置新密码"表单；`package.json` 声明协议注册。
+  - 受影响模块：`main.js`、`src/auth.js`、`src/ipc-channels.js`、`preload.js`、`renderer/index.html`、`renderer/renderer.js`、`package.json`
+- **chore**: Worker 限流生效——创建 Cloudflare KV namespace `RATE_LIMIT`（id: `17f720c55b4740949f67bc6a1634c189`）并绑定到 `wrangler.toml`，注册 5 次/小时/IP、登录 20 次/分钟/IP、重置 3 次/小时/IP。
+  - 受影响模块：`worker/wrangler.toml`
+- **chore**: 部署 Cloudflare Worker 认证代理到 `clipfast-auth-proxy.clipfast-auth-proxy.workers.dev`，注入 SUPABASE_URL 和 SUPABASE_ANON_KEY secrets；端到端注册请求验证通过（HTTP 200，返回有效 JWT）。`.env` 和 `.env.example` 已启用 `CLIPFAST_AUTH_PROXY_URL`。
+  - 受影响模块：`worker/index.js`、`worker/wrangler.toml`、`.env`、`.env.example`、`docs/CHANGELOG.md`
+- **feat**: 新增 Cloudflare Worker 认证代理层，生产环境通过 `CLIPFAST_AUTH_PROXY_URL` 将 Supabase Auth 请求路由至 Worker，由 Worker 注入 anon key 并执行 IP 限流，客户端不再暴露 Supabase URL 和 anon key。
+  - 受影响模块：`worker/index.js`（新增）、`worker/wrangler.toml`（新增）、`worker/package.json`（新增）、`worker/README.md`（新增）、`main.js`、`.env.example`
 - **refactor**: 简化认证与启动路径——启动会话恢复统一走 `handleAuthChanged` 且不再阻塞快捷键/托盘注册；受保护 IPC 改用内存态 `currentUser` 检查，移除每次调用触发的 session 磁盘读取与解密；删除仅剩单调用者的 `requireAuthenticatedUser` 与 `assertAuthenticatedSession`。
   - 受影响模块：`main.js`、`src/auth.js`、`test/auth-service.test.js`
 - **refactor**: 邮箱规范化校验提取 `normalizeEmail` 供登录与密码重置复用，消除同文件两处重复。

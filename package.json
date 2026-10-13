@@ -26,6 +26,12 @@
   "build": {
     "appId": "com.clipfast.app",
     "productName": "clipFast",
+    "protocols": [
+      {
+        "name": "ClipFast Auth",
+        "schemes": ["clipfast"]
+      }
+    ],
     "directories": {
       "output": "dist"
     },

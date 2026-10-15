@@ -350,6 +350,7 @@ a:focus-visible {
 }
 
 .main-content {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -568,6 +569,55 @@ a:focus-visible {
 
 .undo-msg a:hover {
   text-decoration: underline;
+}
+
+.new-records-notice {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  z-index: 30;
+  padding: 7px 13px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  transform: translateX(-50%);
+  box-shadow: var(--shadow-md);
+}
+
+.new-records-notice:hover {
+  border-color: var(--accent);
+}
+
+.scroll-top {
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.scroll-top:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.scroll-top[hidden] {
+  display: none;
 }
 
 /* Record list */

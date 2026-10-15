@@ -6,6 +6,7 @@ const { test } = require('node:test')
 const markup = readFileSync(join(__dirname, '../renderer/index.html'), 'utf8')
 const styles = readFileSync(join(__dirname, '../renderer/style.css'), 'utf8')
 const mainSource = readFileSync(join(__dirname, '../main.js'), 'utf8')
+const rendererSource = readFileSync(join(__dirname, '../renderer/renderer.js'), 'utf8')
 const preloadSource = readFileSync(join(__dirname, '../preload.js'), 'utf8')
 
 test('account entry belongs to the sidebar instead of the top toolbar', () => {
@@ -79,4 +80,25 @@ test('sandboxed preload inline IPC channels stay in sync with src/ipc-channels.j
 
   const inlineChannels = new Function(`return ${inline[1]}`)()
   assert.deepEqual(inlineChannels, require('../src/ipc-channels.js'))
+})
+
+test('duplicate capture no longer shows a persistent undo-closed toast', () => {
+  assert.doesNotMatch(rendererSource, /撤销已关闭/)
+  assert.doesNotMatch(rendererSource, /undoClosedShown/)
+})
+
+test('scrolling away keeps a clickable prompt for records captured later', () => {
+  assert.match(markup, /id="newRecordsNotice"/)
+  assert.match(markup, /id="newRecordsCount"/)
+  assert.match(rendererSource, /unseenRecordCount/)
+  assert.match(rendererSource, /document\.hidden/)
+  assert.match(styles, /\.new-records-notice \{/)
+})
+
+test('the record list provides a scroll-to-top control', () => {
+  assert.match(markup, /id="scrollToTop"/)
+  assert.match(markup, /aria-label="回到顶部"/)
+  assert.match(rendererSource, /SCROLL_TOP_THRESHOLD_PX/)
+  assert.match(styles, /\.scroll-top \{/)
+  assert.match(styles, /\.scroll-top\[hidden\] \{\s*display: none;/)
 })

@@ -2,6 +2,17 @@
 
 本文档记录 AI 产生的项目变更。日期格式为 `YYYY-MM-DD`。
 
+## 2026-10-15
+
+- **fix**: 移除重复记录置顶后“撤销已关闭”的持久 Toast 与一次性关闭标记，让撤销提示随记录更新直接收起。
+  - 受影响模块：`renderer/renderer.js`、`test/workspace-ui.test.js`
+- **fix**: 同步更新新记录提示中的累积数量，避免界面滚动离开顶部后显示“有 0 条新记录”。
+  - 受影响模块：`renderer/renderer.js`、`docs/CHANGELOG.md`
+- **feat**: 面板隐藏或列表离开顶部时，累积提示新增记录数量，点击提示回到顶部；列表滚动后提供“回到顶部”浮动按钮。
+  - 受影响模块：`renderer/index.html`、`renderer/renderer.js`、`renderer/style.css`、`test/workspace-ui.test.js`、`docs/CHANGELOG.md`
+- **docs**: 版本号升级到 `1.0.1`，README 补充新记录提醒与回到顶部说明。
+  - 受影响模块：`package.json`、`package-lock.json`、`README.md`、`docs/CHANGELOG.md`
+
 ## 2026-10-13
 
 ### 2026-10-13 变更简化复审（/simplify）

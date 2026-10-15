@@ -6,8 +6,8 @@
 
 | 平台 | 文件 | 说明 |
 |------|------|------|
-| macOS (Apple Silicon) | `clipFast-1.0.0-arm64.dmg` | 未签名，首次打开需右键 → 打开 |
-| Windows x64 | `ClipFast-1.0.0-win-x64.zip` | 解压后运行 ClipFast.exe |
+| macOS (Apple Silicon) | `clipFast-1.0.1-arm64.dmg` | 未签名，首次打开需右键 → 打开 |
+| Windows x64 | `ClipFast-1.0.1-win-x64.zip` | 解压后运行 ClipFast.exe |
 
 前往 [Releases](https://github.com/Fxxk181126/clipFast/releases) 下载。
 
@@ -16,6 +16,8 @@
 - 智能分类：粗粒度识别为"文本 / 链接 / 代码"三类
 - 快捷检索：关键词搜索、类型筛选、仅看收藏
 - 快速操作：一键粘贴、收藏/取消收藏、删除、预览
+- 新记录提醒：面板隐藏或列表离开顶部时汇总新记录数量，点击回到顶部
+- 便捷导航：长列表滚动后一键回到顶部
 - 全局快捷键：`Cmd/Ctrl + Shift + V` 显示/隐藏面板
 - 本地持久化：使用 `electron-store` 存储记录与设置
 - 强制账号：Supabase Auth 邮箱密码注册、登录、会话恢复和退出

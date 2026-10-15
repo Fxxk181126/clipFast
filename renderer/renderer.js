@@ -10,14 +10,16 @@ let scheduleId = null
 let searchTimer = null
 let toastTimer = null
 let undoStack = [] // 元素为 { id, fromIndex }，栈顶为最近一次置顶
-let undoClosedShown = false
 let shortcutDraft = null
 let appInitialized = false
 let authConfigured = true
+let unseenRecordCount = 0
 
 // 列表最多保留的可见条数（须与 main.js 的 LIST_CAP 一致）
 const MAX_VISIBLE = 500
 const SEARCH_DEBOUNCE_MS = 250
+const SCROLL_TOP_THRESHOLD_PX = 160
+const NEW_RECORD_SCROLL_THRESHOLD_PX = 40
 
 const $ = (sel) => document.querySelector(sel)
 const $$ = (sel) => Array.from(document.querySelectorAll(sel))
@@ -319,6 +321,7 @@ function applyIncremental(items) {
   const container = $('#list')
   if (!items.length) return
 
+  let insertedCount = 0
   if (container.querySelector('.empty-state')) {
     container.innerHTML = ''
   }
@@ -331,6 +334,7 @@ function applyIncremental(items) {
 
     state.list.unshift({ ...rec, __fav: false })
     if (state.list.length > MAX_VISIBLE) state.list.length = MAX_VISIBLE
+    insertedCount += 1
 
     const card = createCardElement({ ...rec, __fav: false })
     flash(card)
@@ -340,6 +344,8 @@ function applyIncremental(items) {
       container.removeChild(container.lastChild)
     }
   }
+
+  return insertedCount
 }
 
 // 须与 main.js records:list 的过滤规则保持一致（增量插入用；全量刷新走主进程过滤）
@@ -369,6 +375,21 @@ function resetUndo() {
   $('#undoMsg').style.display = 'none'
 }
 
+function clearNewRecordNotice() {
+  unseenRecordCount = 0
+  $('#newRecordsCount').textContent = '0'
+  $('#newRecordsNotice').hidden = true
+}
+
+function updateScrollControls() {
+  const container = $('#list')
+  const shouldShowNotice = unseenRecordCount > 0 &&
+    (document.hidden || container.scrollTop > NEW_RECORD_SCROLL_THRESHOLD_PX)
+  $('#newRecordsCount').textContent = unseenRecordCount
+  $('#newRecordsNotice').hidden = !shouldShowNotice
+  $('#scrollToTop').hidden = container.scrollTop <= SCROLL_TOP_THRESHOLD_PX
+}
+
 function moveDomItemToTop(currentIndex) {
   const container = $('#list')
   const prevScroll = container.scrollTop
@@ -383,8 +404,6 @@ function moveDomItemToTop(currentIndex) {
 
 // Initialization
 async function init() {
-  undoClosedShown = localStorage.getItem('undoClosedShown') === '1'
-
   // Header Actions
   $('#openShortcut').onclick = openShortcutModal
 
@@ -398,6 +417,7 @@ async function init() {
   $('#toggleFav').onclick = async () => {
     state.onlyFavorites = !state.onlyFavorites
     $('#toggleFav').classList.toggle('active', state.onlyFavorites)
+    clearNewRecordNotice()
     await refresh()
   }
 
@@ -410,6 +430,7 @@ async function init() {
     })
     if (confirmed) {
       await window.clipfast.clearRecords()
+      clearNewRecordNotice()
       await refresh()
       showMsg('所有记录已清空')
     }
@@ -421,9 +442,22 @@ async function init() {
       $$('.nav-item').forEach(b => b.classList.remove('active'))
       btn.classList.add('active')
       state.type = btn.dataset.type
+      clearNewRecordNotice()
       await refresh()
     }
   })
+
+  $('#newRecordsNotice').onclick = () => {
+    clearNewRecordNotice()
+    $('#list').scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  $('#scrollToTop').onclick = () => {
+    $('#list').scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  $('#list').addEventListener('scroll', updateScrollControls, { passive: true })
+  document.addEventListener('visibilitychange', updateScrollControls)
 
   // 撤销按钮只绑定一次
   $('#undoBtn').onclick = async (e) => {
@@ -438,17 +472,16 @@ async function init() {
   // Events
   window.clipfastEvents.onNewRecord((rec) => {
     pending.push(rec)
-    if (undoStack.length && !undoClosedShown) {
-      showMsg('撤销已关闭', true)
-      undoClosedShown = true
-      localStorage.setItem('undoClosedShown', '1')
-    }
     resetUndo()
     if (scheduleId) return
     scheduleId = setTimeout(() => {
       scheduleId = null
       try {
-        applyIncremental(pending.splice(0))
+        const insertedCount = applyIncremental(pending.splice(0))
+        const awayFromTop = document.hidden ||
+          $('#list').scrollTop > NEW_RECORD_SCROLL_THRESHOLD_PX
+        if (awayFromTop) unseenRecordCount += insertedCount
+        updateScrollControls()
       } catch { showMsg('更新失败') }
     }, 250)
   })
@@ -462,8 +495,6 @@ async function init() {
       moveDomItemToTop(idx)
 
       undoStack.unshift({ id, fromIndex })
-      undoClosedShown = false
-      localStorage.removeItem('undoClosedShown')
       $('#undoMsg').style.display = 'flex'
     }
   })
